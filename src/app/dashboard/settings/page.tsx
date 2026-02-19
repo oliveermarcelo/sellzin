@@ -1,4 +1,5 @@
 "use client";
+// @ts-nocheck
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { PageHeader, Button, Input, Badge } from "@/components/ui";

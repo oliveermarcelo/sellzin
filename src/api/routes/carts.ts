@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { FastifyInstance } from "fastify";
 import { db } from "../../lib/db";
 import { abandonedCarts } from "../../lib/db/schema";

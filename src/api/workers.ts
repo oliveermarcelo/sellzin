@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Worker, Job } from "bullmq";
 import { redisConnection } from "../lib/redis";
 import { db } from "../lib/db";

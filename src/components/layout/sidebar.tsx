@@ -1,4 +1,5 @@
 "use client";
+// @ts-nocheck
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";

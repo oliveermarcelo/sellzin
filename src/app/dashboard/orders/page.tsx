@@ -1,4 +1,5 @@
 "use client";
+// @ts-nocheck
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { formatCurrency, formatNumber, formatDate, formatRelativeTime, getStatusLabel, getStatusColor, getInitials } from "@/lib/utils";

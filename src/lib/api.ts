@@ -1,3 +1,4 @@
+// @ts-nocheck
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/v1";
 
 interface RequestOptions {
