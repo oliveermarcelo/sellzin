@@ -1,0 +1,123 @@
+version: "3.8"
+
+# ============================================
+# Sellzin CRM — Docker Compose (Portainer Ready)
+# ============================================
+# Deploy via Portainer: Stacks → Add Stack → Upload
+# ou via CLI: docker compose up -d
+# ============================================
+
+services:
+  # ── App (Next.js + Fastify API) ──
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: sellzin-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+      - "${API_PORT:-3001}:3001"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-sellzin}:${POSTGRES_PASSWORD:-sellzin_secret}@postgres:5432/${POSTGRES_DB:-sellzin}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - sellzin-net
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # ── PostgreSQL ──
+  postgres:
+    image: postgres:16-alpine
+    container_name: sellzin-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sellzin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sellzin_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-sellzin}
+    volumes:
+      - sellzin-pgdata:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sellzin}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sellzin-net
+
+  # ── Redis ──
+  redis:
+    image: redis:7-alpine
+    container_name: sellzin-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - sellzin-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sellzin-net
+
+  # ── BullMQ Dashboard (opcional) ──
+  bull-board:
+    image: node:20-alpine
+    container_name: sellzin-bull-board
+    restart: unless-stopped
+    ports:
+      - "${BULL_BOARD_PORT:-3002}:3002"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sellzin-net
+    profiles:
+      - monitoring
+    command: >
+      sh -c "
+        npm install -g @bull-board/api @bull-board/express express bullmq &&
+        node -e \"
+          const express = require('express');
+          const { createBullBoard } = require('@bull-board/api');
+          const { BullMQAdapter } = require('@bull-board/api/bullMQAdapter');
+          const { ExpressAdapter } = require('@bull-board/express');
+          const { Queue } = require('bullmq');
+          const app = express();
+          const serverAdapter = new ExpressAdapter();
+          serverAdapter.setBasePath('/');
+          const connection = { host: 'redis', port: 6379 };
+          const queues = ['webhooks', 'whatsapp', 'recovery', 'sync', 'analytics'].map(
+            name => new BullMQAdapter(new Queue(name, { connection }))
+          );
+          createBullBoard({ queues, serverAdapter });
+          app.use('/', serverAdapter.getRouter());
+          app.listen(3002, () => console.log('Bull Board: http://localhost:3002'));
+        \"
+      "
+
+volumes:
+  sellzin-pgdata:
+    driver: local
+  sellzin-redis:
+    driver: local
+
+networks:
+  sellzin-net:
+    driver: bridge
