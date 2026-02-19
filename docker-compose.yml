@@ -24,6 +24,7 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://${POSTGRES_USER:-sellzin}:${POSTGRES_PASSWORD:-sellzin_secret}@postgres:5432/${POSTGRES_DB:-sellzin}
       - REDIS_URL=redis://redis:6379
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

@@ -4,6 +4,58 @@ import { db } from "../../lib/db";
 import { contacts, orders, abandonedCarts, campaigns, stores, interactions, assistantMessages } from "../../lib/db/schema";
 import { eq, and, sql, desc, ilike, or, gte, lte } from "drizzle-orm";
 
+// ── Groq LLM Integration ──
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "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";
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+
+async function humanizeWithLLM(rawData: string, userMessage: string, intent: string): Promise<string> {
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: `Você é o assistente IA do Sellzin CRM, um CRM para e-commerce brasileiro.
+Responda de forma natural, amigável e profissional em português do Brasil.
+Use emojis com moderação. Seja direto mas gentil.
+Quando houver dados numéricos, destaque os mais importantes e dê insights práticos.
+Se os números forem baixos ou zero, sugira ações concretas para melhorar.
+Se os números forem bons, parabenize e sugira como manter o crescimento.
+Nunca invente dados — use apenas os dados fornecidos abaixo.
+Formate valores em R$ quando aplicável. Mantenha a resposta curta (máx 200 palavras).
+Ao final, sugira 1-2 próximos passos práticos.`
+          },
+          {
+            role: "user",
+            content: `O lojista perguntou: "${userMessage}"
+
+Dados do CRM (intent: ${intent}):
+${rawData}
+
+Responda de forma natural e humanizada baseado nesses dados.`
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("[groq] Error:", res.status, await res.text());
+      return rawData; // Fallback to raw response
+    }
+
+    const json = await res.json();
+    return json.choices?.[0]?.message?.content || rawData;
+  } catch (err) {
+    console.error("[groq] Fetch error:", err);
+    return rawData; // Fallback to raw response
+  }
+}
+
 // Intent detection patterns
 const INTENT_PATTERNS: { intent: string; patterns: RegExp[] }[] = [
   { intent: "overview", patterns: [/como est(ão|a) (as vendas|o negócio|a loja|meu e-?commerce)/i, /visão geral/i, /dashboard/i, /resumo/i, /overview/i] },
@@ -557,6 +609,15 @@ export default async function assistantRoutes(app: FastifyInstance) {
       response = `❌ Erro ao processar: ${err.message}. Tente novamente.`;
     }
 
+    // Humanize response with LLM (skip for help/unknown intents)
+    if (GROQ_API_KEY && intent !== "help" && !response.startsWith("❌")) {
+      try {
+        response = await humanizeWithLLM(response, message, intent);
+      } catch (e) {
+        // Keep raw response on error
+      }
+    }
+
     // Log to assistant_messages
     try {
       const convId = conversationId || `conv_${Date.now()}`;
@@ -657,6 +718,13 @@ export default async function assistantRoutes(app: FastifyInstance) {
 }
 
 // ── Helper functions ──
+// Helper to safely get rows from db.execute result
+function getRows(result: any): any[] {
+  if (Array.isArray(result)) return result;
+  if (result?.rows) return result.rows;
+  return [];
+}
+
 async function getRevenueSummary(tenantId: string) {
   const result = await db.execute(sql`
     SELECT
@@ -664,7 +732,7 @@ async function getRevenueSummary(tenantId: string) {
       COALESCE(SUM(CASE WHEN placed_at >= NOW() - INTERVAL '60 days' AND placed_at < NOW() - INTERVAL '30 days' THEN total::numeric END), 0) as previous_revenue
     FROM orders WHERE tenant_id = ${tenantId} AND status != 'cancelled'
   `);
-  const row = (result.rows[0] || {}) as any;
+  const row = (getRows(result)[0] || {}) as any;
   const current = parseFloat(row.current_revenue) || 0;
   const previous = parseFloat(row.previous_revenue) || 0;
   const change = previous > 0 ? ((current - previous) / previous) * 100 : 0;
@@ -678,7 +746,7 @@ async function getRevenueForPeriod(tenantId: string, daysAgo: number, daysEnd: n
       AND placed_at >= NOW() - INTERVAL '1 day' * ${daysAgo}
       AND placed_at < NOW() - INTERVAL '1 day' * ${daysEnd}
   `);
-  const row = (result.rows[0] || {}) as any;
+  const row = (getRows(result)[0] || {}) as any;
   return { orders: parseInt(row.orders) || 0, revenue: parseFloat(row.revenue) || 0, avgValue: parseFloat(row.avg_value) || 0 };
 }
 
@@ -688,7 +756,7 @@ async function getRecentRevenue(tenantId: string, days: number) {
     FROM orders WHERE tenant_id = ${tenantId} AND status != 'cancelled' AND placed_at >= NOW() - INTERVAL '1 day' * ${days}
     GROUP BY DATE(placed_at) ORDER BY period
   `);
-  return result.rows;
+  return getRows(result);
 }
 
 async function getOrdersSummary(tenantId: string) {
@@ -697,7 +765,7 @@ async function getOrdersSummary(tenantId: string) {
       COUNT(CASE WHEN status IN ('pending', 'processing') THEN 1 END) as pending_shipment
     FROM orders WHERE tenant_id = ${tenantId} AND placed_at >= NOW() - INTERVAL '30 days'
   `);
-  const row = (result.rows[0] || {}) as any;
+  const row = (getRows(result)[0] || {}) as any;
   return {
     total: parseInt(row.total) || 0, totalRevenue: parseFloat(row.total_revenue) || 0,
     avgValue: parseFloat(row.avg_value) || 0, pendingShipment: parseInt(row.pending_shipment) || 0,
@@ -713,7 +781,7 @@ async function getContactsSummary(tenantId: string) {
       COUNT(CASE WHEN is_opted_in = true THEN 1 END) as opted_in
     FROM contacts WHERE tenant_id = ${tenantId}
   `);
-  const row = (result.rows[0] || {}) as any;
+  const row = (getRows(result)[0] || {}) as any;
   const total = parseInt(row.total) || 0;
   const withOrders = parseInt(row.with_orders) || 0;
   const repeat = parseInt(row.repeat_customers) || 0;
@@ -733,7 +801,7 @@ async function getCartsSummary(tenantId: string) {
       COALESCE(SUM(CASE WHEN is_recovered = true THEN total::numeric END), 0) as recovered_value
     FROM abandoned_carts WHERE tenant_id = ${tenantId} AND abandoned_at >= NOW() - INTERVAL '30 days'
   `);
-  const row = (result.rows[0] || {}) as any;
+  const row = (getRows(result)[0] || {}) as any;
   const abandoned = parseInt(row.total) || 0;
   const recovered = parseInt(row.recovered) || 0;
   return {
@@ -749,5 +817,5 @@ async function getSegmentDistribution(tenantId: string) {
     FROM contacts WHERE tenant_id = ${tenantId} AND rfm_segment IS NOT NULL
     GROUP BY rfm_segment ORDER BY count DESC
   `);
-  return result.rows;
+  return getRows(result);
 }

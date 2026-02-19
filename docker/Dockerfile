@@ -44,8 +44,9 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/src/api ./src/api
+COPY --from=builder /app/src ./src
 COPY --from=builder /app/drizzle ./drizzle
+COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 
 # Script de startup
 COPY docker/entrypoint.sh /entrypoint.sh

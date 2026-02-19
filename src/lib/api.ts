@@ -1,5 +1,11 @@
 // @ts-nocheck
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/v1";
+function getApiBase(): string {
+  if (typeof window !== "undefined") {
+    // Browser: use same hostname, port 3001
+    return `${window.location.protocol}//${window.location.hostname}:3001/v1`;
+  }
+  return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/v1";
+}
 
 interface RequestOptions {
   method?: string;
@@ -42,7 +48,7 @@ class ApiClient {
 
     if (body) config.body = JSON.stringify(body);
 
-    const res = await fetch(`${API_BASE}${endpoint}`, config);
+    const res = await fetch(`${getApiBase()}${endpoint}`, config);
 
     if (res.status === 401) {
       this.setToken(null);
