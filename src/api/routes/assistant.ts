@@ -4,55 +4,61 @@ import { db } from "../../lib/db";
 import { contacts, orders, abandonedCarts, campaigns, stores, interactions, assistantMessages } from "../../lib/db/schema";
 import { eq, and, sql, desc, ilike, or, gte, lte } from "drizzle-orm";
 
-// ── Groq LLM Integration ──
-const GROQ_API_KEY = process.env.GROQ_API_KEY || "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";
+// ── LLM Integration (OpenAI GPT-4o Mini + Groq fallback) ──
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
+const SYSTEM_PROMPT = `Você é o assistente IA do Sellzin CRM, especializado EXCLUSIVAMENTE em e-commerce e CRM.
+REGRAS OBRIGATÓRIAS:
+- Responda APENAS sobre: vendas, pedidos, clientes, contatos, carrinhos abandonados, campanhas, segmentação RFM, faturamento, analytics de e-commerce e funcionalidades do Sellzin.
+- Se o usuário perguntar algo fora do escopo (política, receitas, piadas, clima, esportes, programação, qualquer outro assunto), responda educadamente: "Sou o assistente do Sellzin CRM e posso ajudar apenas com questões do seu e-commerce. Pergunte sobre vendas, clientes, pedidos ou campanhas! 😊"
+- NUNCA responda perguntas que não sejam sobre o CRM/e-commerce, mesmo que insistam.
+- Use português do Brasil, tom profissional e amigável.
+- Use emojis com moderação. Seja direto mas gentil.
+- Quando houver dados numéricos, destaque os mais importantes e dê insights práticos.
+- Se os números forem baixos ou zero, sugira ações concretas para melhorar.
+- Se os números forem bons, parabenize e sugira como manter o crescimento.
+- Nunca invente dados — use apenas os dados fornecidos abaixo.
+- Formate valores em R$ quando aplicável. Mantenha a resposta curta (máx 200 palavras).
+- Ao final, sugira 1-2 próximos passos práticos relacionados ao CRM.`;
+
+async function callLLM(apiUrl: string, apiKey: string, model: string, messages: any[]): Promise<string | null> {
+  const res = await fetch(apiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+    body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 500 }),
+  });
+  if (!res.ok) {
+    console.error(`[llm] ${model} error:`, res.status);
+    return null;
+  }
+  const json = await res.json();
+  return json.choices?.[0]?.message?.content || null;
+}
+
 async function humanizeWithLLM(rawData: string, userMessage: string, intent: string): Promise<string> {
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: `O lojista perguntou: "${userMessage}"\n\nDados do CRM (intent: ${intent}):\n${rawData}\n\nResponda de forma natural e humanizada baseado nesses dados.` }
+  ];
+
   try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: [
-          {
-            role: "system",
-            content: `Você é o assistente IA do Sellzin CRM, um CRM para e-commerce brasileiro.
-Responda de forma natural, amigável e profissional em português do Brasil.
-Use emojis com moderação. Seja direto mas gentil.
-Quando houver dados numéricos, destaque os mais importantes e dê insights práticos.
-Se os números forem baixos ou zero, sugira ações concretas para melhorar.
-Se os números forem bons, parabenize e sugira como manter o crescimento.
-Nunca invente dados — use apenas os dados fornecidos abaixo.
-Formate valores em R$ quando aplicável. Mantenha a resposta curta (máx 200 palavras).
-Ao final, sugira 1-2 próximos passos práticos.`
-          },
-          {
-            role: "user",
-            content: `O lojista perguntou: "${userMessage}"
-
-Dados do CRM (intent: ${intent}):
-${rawData}
-
-Responda de forma natural e humanizada baseado nesses dados.`
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
-      }),
-    });
-
-    if (!res.ok) {
-      console.error("[groq] Error:", res.status, await res.text());
-      return rawData; // Fallback to raw response
+    // Tenta OpenAI primeiro
+    if (OPENAI_API_KEY) {
+      const result = await callLLM("https://api.openai.com/v1/chat/completions", OPENAI_API_KEY, OPENAI_MODEL, messages);
+      if (result) return result;
     }
-
-    const json = await res.json();
-    return json.choices?.[0]?.message?.content || rawData;
+    // Fallback: Groq
+    if (GROQ_API_KEY) {
+      const result = await callLLM("https://api.groq.com/openai/v1/chat/completions", GROQ_API_KEY, GROQ_MODEL, messages);
+      if (result) return result;
+    }
+    return rawData;
   } catch (err) {
-    console.error("[groq] Fetch error:", err);
-    return rawData; // Fallback to raw response
+    console.error("[llm] Error:", err);
+    return rawData;
   }
 }
 
@@ -610,7 +616,7 @@ export default async function assistantRoutes(app: FastifyInstance) {
     }
 
     // Humanize response with LLM (skip for help/unknown intents)
-    if (GROQ_API_KEY && intent !== "help" && !response.startsWith("❌")) {
+    if ((OPENAI_API_KEY || GROQ_API_KEY) && intent !== "help" && !response.startsWith("❌")) {
       try {
         response = await humanizeWithLLM(response, message, intent);
       } catch (e) {
