@@ -24,12 +24,11 @@ interface Suggestion {
   prompt: string;
 }
 
-// Markdown-like formatting for assistant messages
 function formatMessage(text: string) {
   return text
-    .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em class="text-zinc-400 italic">$1</em>')
-    .replace(/_(.+?)_/g, '<em class="text-zinc-500 text-xs">$1</em>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong class="text-gray-900 font-semibold">$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em class="text-gray-600 italic">$1</em>')
+    .replace(/_(.+?)_/g, '<em class="text-gray-400 text-xs">$1</em>')
     .replace(/\n/g, "<br/>");
 }
 
@@ -51,29 +50,23 @@ export default function AssistantPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Load suggestions on mount
   useEffect(() => {
     api.assistantSuggestions().then((data: any) => {
       if (data.suggestions) setSuggestions(data.suggestions);
     }).catch(() => {});
   }, []);
 
-  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Focus input
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || loading) return;
 
     const userMsg: Message = {
-      id: `u_${Date.now()}`,
-      role: "user",
-      content: text.trim(),
-      timestamp: new Date(),
+      id: `u_${Date.now()}`, role: "user", content: text.trim(), timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
@@ -81,43 +74,30 @@ export default function AssistantPage() {
 
     try {
       const data = await api.assistantChat(text.trim(), conversationId);
-
       const assistantMsg: Message = {
-        id: `a_${Date.now()}`,
-        role: "assistant",
+        id: `a_${Date.now()}`, role: "assistant",
         content: data.message || "Não consegui processar. Tente novamente.",
-        intent: data.intent,
-        timestamp: new Date(),
-        actions: data.actions,
+        intent: data.intent, timestamp: new Date(), actions: data.actions,
       };
       setMessages((prev) => [...prev, assistantMsg]);
-
-      // Update suggestions if provided
       if (data.suggestions?.length) {
         setSuggestions(data.suggestions.map((s: string) => ({
           icon: "💡", text: s, action: s, prompt: s,
         })));
       }
     } catch (err: any) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `e_${Date.now()}`,
-          role: "assistant",
-          content: "⚠️ Erro de conexão com a API. Verifique se o servidor está rodando.",
-          timestamp: new Date(),
-        },
-      ]);
+      setMessages((prev) => [...prev, {
+        id: `e_${Date.now()}`, role: "assistant",
+        content: "⚠️ Erro de conexão com a API. Verifique se o servidor está rodando.",
+        timestamp: new Date(),
+      }]);
     } finally {
       setLoading(false);
       inputRef.current?.focus();
     }
   }, [loading, conversationId]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    sendMessage(input);
-  };
+  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); sendMessage(input); };
 
   const copyMessage = (content: string, id: string) => {
     navigator.clipboard.writeText(content.replace(/\*\*/g, "").replace(/\n/g, "\n"));
@@ -136,55 +116,48 @@ export default function AssistantPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)]">
-      <PageHeader
-        title="Assistente IA"
-        description="Gerencie seu e-commerce por conversa natural"
+      <PageHeader title="Assistente IA" description="Gerencie seu e-commerce por conversa natural"
         actions={
           <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-600 bg-zinc-800/50 px-2 py-1 rounded-full flex items-center gap-1">
-              <Zap className="w-3 h-3 text-amber-500" />
-              OpenClaw Powered
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full flex items-center gap-1">
+              <Zap className="w-3 h-3 text-red-500" /> GPT-4o Mini
             </span>
           </div>
         }
       />
 
-      <div className="flex-1 flex flex-col min-h-0 bg-zinc-950/50 rounded-xl border border-zinc-800/40 overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
           {messages.length === 0 ? (
-            // Welcome state
             <div className="flex flex-col items-center justify-center h-full text-center py-12">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-sky-500/20 border border-indigo-500/20 flex items-center justify-center mb-6">
-                <Bot className="w-8 h-8 text-indigo-400" />
+              <div className="w-16 h-16 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center mb-6">
+                <Bot className="w-8 h-8 text-red-600" />
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">Assistente Sellzin</h3>
-              <p className="text-sm text-zinc-500 max-w-md mb-8">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Assistente Sellzin</h3>
+              <p className="text-sm text-gray-500 max-w-md mb-8">
                 Pergunte sobre vendas, clientes, pedidos, carrinhos abandonados, ou peça para executar ações no seu CRM.
               </p>
 
-              {/* Quick actions grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-w-lg w-full">
                 {quickActions.map((qa) => (
                   <button key={qa.label} onClick={() => sendMessage(qa.prompt)}
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800/50 hover:border-indigo-500/30 hover:bg-zinc-900 transition text-left group">
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 hover:border-red-300 hover:bg-red-50/50 transition text-left group">
                     <span className="text-lg">{qa.icon}</span>
-                    <span className="text-xs text-zinc-400 group-hover:text-zinc-300">{qa.label}</span>
+                    <span className="text-xs text-gray-500 group-hover:text-gray-700">{qa.label}</span>
                   </button>
                 ))}
               </div>
 
-              {/* Dynamic suggestions */}
               {suggestions.length > 0 && (
                 <div className="mt-6 w-full max-w-lg">
-                  <p className="text-xs text-zinc-600 mb-2">Sugestões baseadas nos seus dados:</p>
+                  <p className="text-xs text-gray-400 mb-2">Sugestões baseadas nos seus dados:</p>
                   <div className="space-y-1.5">
                     {suggestions.map((s, i) => (
                       <button key={i} onClick={() => sendMessage(s.prompt)}
-                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-900/50 border border-zinc-800/30 hover:border-amber-500/30 transition text-left">
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 hover:border-red-300 transition text-left">
                         <span>{s.icon}</span>
-                        <span className="text-xs text-zinc-400 flex-1">{s.text}</span>
-                        <span className="text-[10px] text-indigo-400 opacity-0 group-hover:opacity-100">→</span>
+                        <span className="text-xs text-gray-500 flex-1">{s.text}</span>
                       </button>
                     ))}
                   </div>
@@ -192,23 +165,22 @@ export default function AssistantPage() {
               )}
             </div>
           ) : (
-            // Message list
             <>
               {messages.map((msg) => (
                 <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}>
                   {msg.role === "assistant" && (
-                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500/20 to-sky-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="w-7 h-7 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center shrink-0 mt-0.5">
                       {msg.intent && intentIcons[msg.intent]
-                        ? (() => { const Icon = intentIcons[msg.intent!]; return <Icon className="w-3.5 h-3.5 text-indigo-400" />; })()
-                        : <Bot className="w-3.5 h-3.5 text-indigo-400" />}
+                        ? (() => { const Icon = intentIcons[msg.intent!]; return <Icon className="w-3.5 h-3.5 text-red-600" />; })()
+                        : <Bot className="w-3.5 h-3.5 text-red-600" />}
                     </div>
                   )}
 
                   <div className={`max-w-[80%] ${msg.role === "user" ? "order-1" : ""}`}>
                     <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                       msg.role === "user"
-                        ? "bg-indigo-500/15 border border-indigo-500/20 text-indigo-100"
-                        : "bg-zinc-900/80 border border-zinc-800/40 text-zinc-300"
+                        ? "bg-gray-900 text-white"
+                        : "bg-gray-50 border border-gray-200 text-gray-700"
                     }`}>
                       {msg.role === "assistant" ? (
                         <div dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }} />
@@ -217,32 +189,30 @@ export default function AssistantPage() {
                       )}
                     </div>
 
-                    {/* Message footer */}
                     <div className="flex items-center gap-2 mt-1 px-1">
-                      <span className="text-[10px] text-zinc-700">
+                      <span className="text-[10px] text-gray-400">
                         {msg.timestamp.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                       </span>
                       {msg.role === "assistant" && msg.intent && msg.intent !== "unknown" && (
-                        <span className="text-[10px] text-zinc-700 bg-zinc-900 px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
                           {msg.intent}
                         </span>
                       )}
                       {msg.role === "assistant" && (
                         <button onClick={() => copyMessage(msg.content, msg.id)}
-                          className="text-zinc-700 hover:text-zinc-400 transition">
+                          className="text-gray-300 hover:text-gray-500 transition">
                           {copied === msg.id
-                            ? <Check className="w-3 h-3 text-green-500" />
+                            ? <Check className="w-3 h-3 text-emerald-500" />
                             : <Copy className="w-3 h-3" />}
                         </button>
                       )}
                     </div>
 
-                    {/* Action buttons */}
                     {msg.actions && msg.actions.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {msg.actions.map((a: any, i: number) => (
                           <button key={i} onClick={() => sendMessage(a.prompt)}
-                            className="text-xs px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20 transition">
+                            className="text-xs px-2.5 py-1 rounded-lg bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition">
                             {a.label}
                           </button>
                         ))}
@@ -251,24 +221,23 @@ export default function AssistantPage() {
                   </div>
 
                   {msg.role === "user" && (
-                    <div className="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
-                      <User className="w-3.5 h-3.5 text-zinc-500" />
+                    <div className="w-7 h-7 rounded-lg bg-gray-200 flex items-center justify-center shrink-0 mt-0.5">
+                      <User className="w-3.5 h-3.5 text-gray-500" />
                     </div>
                   )}
                 </div>
               ))}
 
-              {/* Typing indicator */}
               {loading && (
                 <div className="flex gap-3">
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500/20 to-sky-500/20 flex items-center justify-center shrink-0">
-                    <Bot className="w-3.5 h-3.5 text-indigo-400" />
+                  <div className="w-7 h-7 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center shrink-0">
+                    <Bot className="w-3.5 h-3.5 text-red-600" />
                   </div>
-                  <div className="bg-zinc-900/80 border border-zinc-800/40 rounded-2xl px-4 py-3">
+                  <div className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3">
                     <div className="flex gap-1">
-                      <span className="w-1.5 h-1.5 bg-zinc-600 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <span className="w-1.5 h-1.5 bg-zinc-600 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                      <span className="w-1.5 h-1.5 bg-zinc-600 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                      <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                     </div>
                   </div>
                 </div>
@@ -278,12 +247,11 @@ export default function AssistantPage() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Quick suggestions bar (when in conversation) */}
         {messages.length > 0 && !loading && (
-          <div className="flex gap-1.5 px-4 py-2 border-t border-zinc-800/30 overflow-x-auto no-scrollbar">
+          <div className="flex gap-1.5 px-4 py-2 border-t border-gray-100 overflow-x-auto no-scrollbar">
             {quickActions.slice(0, 4).map((qa) => (
               <button key={qa.label} onClick={() => sendMessage(qa.prompt)}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900/50 border border-zinc-800/30 text-[11px] text-zinc-500 hover:text-zinc-300 hover:border-zinc-700 transition whitespace-nowrap shrink-0">
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 border border-gray-200 text-[11px] text-gray-500 hover:text-gray-700 hover:border-gray-300 transition whitespace-nowrap shrink-0">
                 <span>{qa.icon}</span> {qa.label}
               </button>
             ))}
@@ -291,29 +259,26 @@ export default function AssistantPage() {
         )}
 
         {/* Input */}
-        <div className="border-t border-zinc-800/40 p-3">
+        <div className="border-t border-gray-200 p-3">
           <form onSubmit={handleSubmit} className="flex gap-2">
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
+            <input ref={inputRef} type="text" value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Pergunte sobre vendas, clientes, pedidos..."
               disabled={loading}
-              className="flex-1 bg-zinc-900/60 border border-zinc-800/50 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500/40 focus:ring-1 focus:ring-indigo-500/20 disabled:opacity-50 transition"
+              className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500/20 disabled:opacity-50 transition"
             />
             <button type="submit" disabled={loading || !input.trim()}
-              className="px-4 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-sm font-medium transition flex items-center gap-2">
+              className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:bg-gray-200 disabled:text-gray-400 text-white text-sm font-medium transition flex items-center gap-2">
               <Send className="w-4 h-4" />
             </button>
           </form>
           <div className="flex items-center justify-between mt-2 px-1">
-            <p className="text-[10px] text-zinc-700">
-              Powered by IA • Dados em tempo real do seu CRM
+            <p className="text-[10px] text-gray-400">
+              Powered by GPT-4o Mini • Dados em tempo real do seu CRM
             </p>
             <div className="flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] text-zinc-700">Online</span>
+              <span className="text-[10px] text-gray-400">Online</span>
             </div>
           </div>
         </div>
