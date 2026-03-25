@@ -8,7 +8,7 @@ import {
   Megaphone, Zap, Settings, LogOut, Store, ChevronLeft, Menu, MessageSquare
 } from "lucide-react";
 import { useState } from "react";
-import { Logo } from "@/components/ui/logo";
+import { Logo, LogoIcon } from "@/components/ui/logo";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -45,7 +45,7 @@ export function Sidebar() {
         {!collapsed ? (
           <Logo className="h-7 w-auto text-white" />
         ) : (
-          <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white font-bold text-sm shrink-0">S</div>
+          <LogoIcon className="h-8 w-auto text-white" />
         )}
         <button onClick={() => setCollapsed(!collapsed)}
           className="ml-auto text-gray-500 hover:text-gray-300 transition hidden lg:block">
