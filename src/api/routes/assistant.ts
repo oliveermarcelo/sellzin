@@ -474,7 +474,7 @@ export default async function assistantRoutes(app: FastifyInstance) {
             LIMIT 10
           `);
 
-          const products = topProducts.rows || [];
+          const products = getRows(topProducts);
           console.log(`[assistant] products query result: ${products.length} rows for tenant ${tenantId}`);
           response = `🏆 **Top Produtos (90 dias)**\n\n`;
           if (products.length === 0) {
