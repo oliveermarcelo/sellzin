@@ -52,10 +52,19 @@ export default function WhatsAppSettingsPage() {
   const handleAdd = async () => {
     setActionLoading("add");
     try {
-      await api.request("/whatsapp/channels", { method: "POST", body: form });
+      const { channel } = await api.request("/whatsapp/channels", { method: "POST", body: form });
       setAddModal(false);
       setForm({ provider: "evolution", name: "", instanceName: "", evolutionUrl: "", evolutionKey: "", phoneNumberId: "", accessToken: "", verifyToken: "", businessAccountId: "" });
       await loadChannels();
+
+      // Auto-show QR for Evolution channels
+      if (form.provider === "evolution") {
+        try {
+          const data = await api.request(`/whatsapp/channels/${channel.id}/qr`);
+          const qrBase64 = data.qr?.base64 || data.qr?.qrcode?.base64;
+          setQrModal({ channel, qr: qrBase64 });
+        } catch (e) { /* QR failed but channel was created */ }
+      }
     } catch (e: any) { alert(e.message); }
     finally { setActionLoading(null); }
   };
@@ -235,7 +244,7 @@ export default function WhatsAppSettingsPage() {
             <>
               <Input label="URL da Evolution API" value={form.evolutionUrl}
                 onChange={(e) => setForm(f => ({ ...f, evolutionUrl: e.target.value }))}
-                placeholder="http://evolution:8080" />
+                placeholder="http://37.27.205.228:8080" />
               <Input label="API Key da Evolution" value={form.evolutionKey}
                 onChange={(e) => setForm(f => ({ ...f, evolutionKey: e.target.value }))}
                 placeholder="sua-chave-evolution" />
