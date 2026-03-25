@@ -30,7 +30,7 @@ export default function WhatsAppSettingsPage() {
   const [form, setForm] = useState({
     provider: "evolution",
     name: "",
-    instanceName: "sellzin",
+    instanceName: "",
     evolutionUrl: "http://evolution:8080",
     evolutionKey: "sellzin-evolution-key",
     phoneNumberId: "",
@@ -248,9 +248,9 @@ export default function WhatsAppSettingsPage() {
               <Input label="API Key da Evolution" value={form.evolutionKey}
                 onChange={(e) => setForm(f => ({ ...f, evolutionKey: e.target.value }))}
                 placeholder="sua-chave-evolution" />
-              <Input label="Nome da instância" value={form.instanceName}
+              <Input label="Nome da instância (opcional)" value={form.instanceName}
                 onChange={(e) => setForm(f => ({ ...f, instanceName: e.target.value }))}
-                placeholder="sellzin (gerado automaticamente se vazio)" />
+                placeholder="Gerado automaticamente por tenant" />
             </>
           )}
 

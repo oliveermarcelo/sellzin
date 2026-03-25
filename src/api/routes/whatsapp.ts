@@ -47,7 +47,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
       tenantId,
       name,
       provider,
-      instanceName: instanceName || (provider === "evolution" ? `sellzin-${nanoid(6)}` : null),
+      instanceName: instanceName || (provider === "evolution" ? `t-${tenantId.slice(0, 8)}-${nanoid(6)}` : null),
       evolutionUrl: evolutionUrl || null,
       evolutionKey: evolutionKey || null,
       phoneNumberId: phoneNumberId || null,
