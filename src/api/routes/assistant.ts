@@ -44,7 +44,7 @@ async function callLLM(apiUrl: string, apiKey: string, model: string, messages: 
 async function humanizeWithLLM(rawData: string, userMessage: string, intent: string): Promise<string> {
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: `O lojista perguntou: "${userMessage}"\n\nDados do CRM (intent: ${intent}):\n${rawData}\n\nResponda de forma natural e humanizada baseado nesses dados.` }
+    { role: "user", content: `O lojista perguntou: "${userMessage}"\n\nDados reais do CRM (intent: ${intent}):\n${rawData}\n\nIMPORTANTE: Exiba os dados EXATAMENTE como estão acima — não altere nomes, números, valores ou quantidades. Apenas adicione no final um breve comentário/insight (1-2 frases) e 1-2 próximos passos. Nunca invente ou modifique nenhum dado.` }
   ];
 
   try {
