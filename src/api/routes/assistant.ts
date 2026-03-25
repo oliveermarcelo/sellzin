@@ -68,7 +68,7 @@ async function humanizeWithLLM(rawData: string, userMessage: string, intent: str
 // Intent detection patterns
 const INTENT_PATTERNS: { intent: string; patterns: RegExp[] }[] = [
   { intent: "overview", patterns: [/como est(ão|a) (as vendas|o negócio|a loja|meu e-?commerce)/i, /visão geral/i, /dashboard/i, /resumo/i, /overview/i] },
-  { intent: "revenue", patterns: [/faturamento/i, /receita/i, /vendas/i, /quanto (vendi|faturei|entrou)/i, /revenue/i] },
+  { intent: "revenue", patterns: [/faturamento/i, /receita/i, /vendas/i, /quanto (vendi|faturei|entrou)/i, /revenue/i, /ultim[ao]s?\s+\d+\s*(horas?|dias?|semanas?|m[eê]s)/i, /hoje/i, /essa semana/i, /esse m[eê]s/i] },
   { intent: "orders", patterns: [/pedidos/i, /orders/i, /encomendas/i, /quantos pedidos/i] },
   { intent: "contacts_stats", patterns: [/quantos (clientes|contatos)/i, /clientes novos/i, /contatos/i, /meus clientes/i] },
   { intent: "contacts_segment", patterns: [/vip/i, /champions/i, /leais/i, /loyal/i, /em risco/i, /at.risk/i, /inativos/i, /lost/i, /hibernating/i, /potenciais/i, /novos clientes/i] },
@@ -131,14 +131,17 @@ function extractSearchQuery(message: string): string | null {
 }
 
 function extractDays(message: string): number {
-  const m = message.match(/(\d+)\s*dias?/i);
-  if (m) return Math.min(Math.max(parseInt(m[1]), 1), 365);
+  const hours = message.match(/(\d+)\s*horas?/i);
+  if (hours) return Math.max(Math.ceil(parseInt(hours[1]) / 24), 1);
+  const days = message.match(/(\d+)\s*dias?/i);
+  if (days) return Math.min(Math.max(parseInt(days[1]), 1), 365);
+  if (/hoje/i.test(message)) return 1;
   if (/semana/i.test(message)) return 7;
   if (/quinzena/i.test(message)) return 15;
   if (/m[eê]s/i.test(message)) return 30;
   if (/trimestre/i.test(message)) return 90;
   if (/ano/i.test(message)) return 365;
-  return 30; // padrão
+  return 30;
 }
 
 function fmt(n: number | string | null | undefined): string {
