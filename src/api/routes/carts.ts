@@ -39,8 +39,8 @@ export async function cartRoutes(app: FastifyInstance) {
         totalValue: sql<number>`COALESCE(SUM(${abandonedCarts.total}::numeric), 0)`,
         recovered: sql<number>`COUNT(*) FILTER (WHERE ${abandonedCarts.isRecovered} = true)`,
         recoveredValue: sql<number>`COALESCE(SUM(${abandonedCarts.total}::numeric) FILTER (WHERE ${abandonedCarts.isRecovered} = true), 0)`,
-        todayAbandoned: sql<number>`COUNT(*) FILTER (WHERE ${abandonedCarts.abandonedAt}::date = CURRENT_DATE)`,
-        todayValue: sql<number>`COALESCE(SUM(${abandonedCarts.total}::numeric) FILTER (WHERE ${abandonedCarts.abandonedAt}::date = CURRENT_DATE), 0)`,
+        todayAbandoned: sql<number>`COUNT(*) FILTER (WHERE (${abandonedCarts.abandonedAt} AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date)`,
+        todayValue: sql<number>`COALESCE(SUM(${abandonedCarts.total}::numeric) FILTER (WHERE (${abandonedCarts.abandonedAt} AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date), 0)`,
       })
       .from(abandonedCarts)
       .where(and(
