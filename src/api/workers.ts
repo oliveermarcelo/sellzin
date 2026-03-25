@@ -355,21 +355,57 @@ async function syncMagento(store: any, tenantId: string) {
 
 // ── Status Mappers ──
 function mapWcStatus(status: string): string {
+  const s = (status || "").toLowerCase().replace(/^wc-/, "");
   const map: Record<string, string> = {
-    pending: "pending", processing: "processing", "on-hold": "pending",
-    completed: "delivered", cancelled: "cancelled", refunded: "refunded",
-    failed: "cancelled", shipped: "shipped",
+    pending: "pending",
+    "pending-payment": "pending",
+    "awaiting-payment": "pending",
+    processing: "processing",
+    "on-hold": "pending",
+    "on_hold": "pending",
+    completed: "delivered",
+    delivered: "delivered",
+    shipped: "shipped",
+    "out-for-delivery": "shipped",
+    cancelled: "cancelled",
+    canceled: "cancelled",
+    failed: "cancelled",
+    refunded: "refunded",
+    "partially-refunded": "refunded",
   };
-  return map[status] || "pending";
+  if (map[s]) return map[s];
+  if (s.includes("cancel")) return "cancelled";
+  if (s.includes("refund")) return "refunded";
+  if (s.includes("complet") || s.includes("deliver") || s.includes("entregue")) return "delivered";
+  if (s.includes("ship") || s.includes("enviad") || s.includes("transit")) return "shipped";
+  return "pending";
 }
 
 function mapMagentoStatus(status: string): string {
+  const s = (status || "").toLowerCase();
   const map: Record<string, string> = {
-    pending: "pending", processing: "processing", complete: "delivered",
-    closed: "refunded", canceled: "cancelled", holded: "pending",
+    pending: "pending",
+    pending_payment: "pending",
+    payment_review: "pending",
+    pending_ogone: "pending",
+    holded: "pending",
+    processing: "processing",
+    processing_ogone: "processing",
+    complete: "delivered",
+    delivered: "delivered",
     shipped: "shipped",
+    closed: "refunded",
+    refunded: "refunded",
+    canceled: "cancelled",
+    cancelled: "cancelled",
+    fraud: "cancelled",
   };
-  return map[status] || "pending";
+  if (map[s]) return map[s];
+  if (s.includes("cancel")) return "cancelled";
+  if (s.includes("refund") || s.includes("closed")) return "refunded";
+  if (s.includes("complet") || s.includes("deliver") || s.includes("entregue")) return "delivered";
+  if (s.includes("ship") || s.includes("enviad") || s.includes("transit")) return "shipped";
+  return "pending";
 }
 
 // ── Error handlers ──
