@@ -167,7 +167,7 @@ export default function ContactsPage() {
                   {selectedContact.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{selectedContact.email}</span>}
                   {selectedContact.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{selectedContact.phone}</span>}
                   {selectedContact.city && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{selectedContact.city}/{selectedContact.state}</span>}
-                  <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />Cliente desde {formatDate(selectedContact.createdAt)}</span>
+                  <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />Cliente desde {formatDate(selectedContact.firstOrderAt || selectedContact.createdAt)}</span>
                 </div>
               </div>
             </div>

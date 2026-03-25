@@ -4,6 +4,7 @@ import { redisConnection } from "../lib/redis";
 import { db } from "../lib/db";
 import { contacts, orders, abandonedCarts, webhookLogs, interactions, whatsappChannels, stores } from "../lib/db/schema";
 import { EvolutionService, WhatsAppOfficialService } from "./services/whatsapp";
+import { calculateRFM } from "./services/rfm";
 import { eq, and, sql } from "drizzle-orm";
 
 // ── Webhook Worker ──
@@ -130,6 +131,8 @@ const syncWorker = new Worker("sync", async (job: Job) => {
       await syncMagento(store, tenantId);
     }
     await db.update(stores).set({ syncStatus: "synced", lastSyncAt: new Date() }).where(eq(stores.id, storeId));
+    // Recalculate RFM scores after sync
+    await calculateRFM(tenantId);
   } catch (err: any) {
     await db.update(stores).set({ syncStatus: "error" }).where(eq(stores.id, storeId));
     throw err;
