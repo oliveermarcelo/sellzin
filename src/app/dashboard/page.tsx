@@ -36,7 +36,7 @@ export default function DashboardPage() {
   const ov = overview;
   const recoveryRate = ov && ov.recovery.abandoned > 0
     ? ((ov.recovery.recovered / ov.recovery.abandoned) * 100).toFixed(1) : "0";
-  const maxRevenue = Math.max(...revenueData.map((d: any) => d.revenue), 1);
+  const maxRevenue = Math.max(...revenueData.map((d: any) => parseFloat(d.revenue) || 0), 1);
 
   return (
     <div>
@@ -64,9 +64,9 @@ export default function DashboardPage() {
           {revenueData.length > 0 ? (
             <div className="h-48 flex items-end gap-[2px]">
               {revenueData.slice(-30).map((d: any, i: number) => {
-                const height = maxRevenue > 0 ? (d.revenue / maxRevenue) * 100 : 0;
+                const height = maxRevenue > 0 ? (parseFloat(d.revenue) / maxRevenue) * 100 : 0;
                 return (
-                  <div key={i} className="flex-1 min-w-0 group relative">
+                  <div key={i} className="flex-1 min-w-0 group relative h-full flex items-end">
                     <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none z-10">
                       {formatCurrency(d.revenue)}<br />{new Date(d.period).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                     </div>
