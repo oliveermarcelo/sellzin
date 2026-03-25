@@ -127,6 +127,17 @@ function extractSearchQuery(message: string): string | null {
   return null;
 }
 
+function extractDays(message: string): number {
+  const m = message.match(/(\d+)\s*dias?/i);
+  if (m) return Math.min(Math.max(parseInt(m[1]), 1), 365);
+  if (/semana/i.test(message)) return 7;
+  if (/quinzena/i.test(message)) return 15;
+  if (/m[eê]s/i.test(message)) return 30;
+  if (/trimestre/i.test(message)) return 90;
+  if (/ano/i.test(message)) return 365;
+  return 30; // padrão
+}
+
 function fmt(n: number | string | null | undefined): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(parseFloat(String(n ?? 0)) || 0);
 }
@@ -190,13 +201,14 @@ export default async function assistantRoutes(app: FastifyInstance) {
 
         // ── REVENUE ──
         case "revenue": {
+          const days = extractDays(message);
           const rev = await getRevenueSummary(tenantId);
-          const recent = await getRecentRevenue(tenantId, 7);
+          const recent = await getRecentRevenue(tenantId, days);
 
           response = `💰 **Faturamento**\n\n`;
           response += `Últimos 30 dias: ${fmt(rev.current)}`;
           if (rev.change !== 0) response += ` (${rev.change > 0 ? "+" : ""}${rev.change.toFixed(1)}%)`;
-          response += `\n\n📈 Últimos 7 dias:\n`;
+          response += `\n\n📈 Últimos ${days} dias:\n`;
           for (const day of recent) {
             const bar = "█".repeat(Math.max(1, Math.round((day.revenue / Math.max(...recent.map((d: any) => d.revenue), 1)) * 10)));
             response += `${new Date(day.period).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" })} ${bar} ${fmt(day.revenue)} (${day.orders} ped.)\n`;
@@ -459,6 +471,7 @@ export default async function assistantRoutes(app: FastifyInstance) {
 
         // ── PRODUCTS ──
         case "products": {
+          const days = extractDays(message);
           const topProducts = await db.execute(sql`
             SELECT
               item->>'name' as name,
@@ -467,7 +480,7 @@ export default async function assistantRoutes(app: FastifyInstance) {
               SUM(COALESCE(NULLIF(item->>'total', '')::numeric, COALESCE(NULLIF(item->>'price', '')::numeric, 0) * COALESCE((item->>'quantity')::numeric, 1))) as total_revenue
             FROM orders, jsonb_array_elements(items::jsonb) as item
             WHERE tenant_id = ${tenantId}
-              AND placed_at >= NOW() - INTERVAL '90 days'
+              AND placed_at >= NOW() - INTERVAL '1 day' * ${days}
               AND item->>'name' IS NOT NULL
             GROUP BY item->>'name', item->>'sku'
             ORDER BY total_revenue DESC
@@ -475,8 +488,7 @@ export default async function assistantRoutes(app: FastifyInstance) {
           `);
 
           const products = getRows(topProducts);
-          console.log(`[assistant] products query result: ${products.length} rows for tenant ${tenantId}`);
-          response = `🏆 **Top Produtos (90 dias)**\n\n`;
+          response = `🏆 **Top Produtos (${days} dias)**\n\n`;
           if (products.length === 0) {
             response += "Sem dados de produtos ainda. Conecte uma loja para começar.";
           } else {
