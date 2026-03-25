@@ -33,16 +33,33 @@ export class EvolutionService {
     return res.json();
   }
 
-  async getQR(instanceName: string, retries = 8, delayMs = 3000) {
+  async getQR(instanceName: string, retries = 10, delayMs = 2000) {
     for (let i = 0; i < retries; i++) {
-      const res = await fetch(`${this.url}/instance/connect/${instanceName}`, {
-        headers: this.headers(),
-      });
-      if (!res.ok) throw new Error(`Evolution getQR error: ${res.status}`);
-      const data = await res.json();
-      // {"count":0} means QR not ready yet
-      const qrBase64 = data?.base64 || data?.qrcode?.base64 || data?.code || null;
-      if (qrBase64) return data;
+      // Method 1: fetchInstances (returns qrcode for awaiting-scan instances)
+      try {
+        const res = await fetch(`${this.url}/instance/fetchInstances?instanceName=${instanceName}`, {
+          headers: this.headers(),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const inst = Array.isArray(data) ? data[0] : data;
+          const qrBase64 = inst?.qrcode?.base64 || inst?.instance?.qrcode?.base64 || null;
+          if (qrBase64) return { base64: qrBase64 };
+        }
+      } catch (e) { /* try next method */ }
+
+      // Method 2: connect endpoint
+      try {
+        const res = await fetch(`${this.url}/instance/connect/${instanceName}`, {
+          headers: this.headers(),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const qrBase64 = data?.base64 || data?.qrcode?.base64 || data?.code || null;
+          if (qrBase64) return { base64: qrBase64 };
+        }
+      } catch (e) { /* continue polling */ }
+
       if (i < retries - 1) await new Promise(r => setTimeout(r, delayMs));
     }
     return { base64: null };
