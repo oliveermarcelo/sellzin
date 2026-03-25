@@ -208,20 +208,23 @@ export default async function assistantRoutes(app: FastifyInstance) {
         // ── REVENUE ──
         case "revenue": {
           const days = extractDays(message);
-          const rev = await getRevenueSummary(tenantId);
+          const periodData = await getRevenueForPeriod(tenantId, days, 0);
+          const prevData = await getRevenueForPeriod(tenantId, days * 2, days);
           const recent = await getRecentRevenue(tenantId, days);
+          const change = prevData.revenue > 0 ? (((periodData.revenue - prevData.revenue) / prevData.revenue) * 100).toFixed(1) : null;
 
-          response = `💰 **Faturamento**\n\n`;
-          response += `Últimos 30 dias: ${fmt(rev.current)}`;
-          if (rev.change !== 0) response += ` (${rev.change > 0 ? "+" : ""}${rev.change.toFixed(1)}%)`;
-          response += `\n\n📈 Últimos ${days} dias:\n`;
+          const periodLabel = days === 1 ? "24 horas" : `${days} dias`;
+          response = `💰 **Faturamento — Últimos ${periodLabel}**\n\n`;
+          response += `Total: ${fmt(periodData.revenue)} | ${periodData.orders} pedidos | Ticket médio: ${fmt(periodData.avgValue)}`;
+          if (change) response += ` (${parseFloat(change) >= 0 ? "+" : ""}${change}% vs período anterior)`;
+          response += `\n\n📈 Detalhamento:\n`;
           for (const day of recent) {
             const bar = "█".repeat(Math.max(1, Math.round((day.revenue / Math.max(...recent.map((d: any) => d.revenue), 1)) * 10)));
             response += `${new Date(day.period).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" })} ${bar} ${fmt(day.revenue)} (${day.orders} ped.)\n`;
           }
 
           suggestions = ["Comparar com semana anterior", "Top produtos", "Ver pedidos"];
-          data = { summary: rev, daily: recent };
+          data = { period: periodData, prev: prevData, daily: recent };
           break;
         }
 
