@@ -390,6 +390,9 @@ async function syncMagentoAbandonedCarts(store: any, tenantId: string) {
     if (!quotes.length) break;
 
     for (const quote of quotes) {
+      if (quotes.indexOf(quote) === 0) {
+        console.log("[sync] Magento quote sample:", JSON.stringify({ grand_total: quote.grand_total, subtotal: quote.subtotal, items: (quote.items || []).slice(0, 1) }, null, 2));
+      }
       const email = quote.customer?.email || quote.billing_address?.email;
       if (!email && !quote.customer_email) continue; // sem identificação, pula
 
