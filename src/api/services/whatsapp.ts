@@ -33,15 +33,30 @@ export class EvolutionService {
     return res.json();
   }
 
-  async getQR(instanceName: string, retries = 12, delayMs = 2000) {
-    // Step 1: trigger connect to start WhatsApp socket
+  async getQR(instanceName: string, retries = 15, delayMs = 2000) {
+    // Trigger connection (returns {count:0} immediately — QR not ready yet)
     await this.triggerConnect(instanceName);
 
-    // Step 2: poll fetchInstances waiting for QR to appear
+    // Poll /instance/connect/ — returns {count:N, base64:...} when QR is ready
     for (let i = 0; i < retries; i++) {
       await new Promise(r => setTimeout(r, delayMs));
-      const qrBase64 = await this.fetchInstanceQR(instanceName);
-      if (qrBase64) return { base64: qrBase64 };
+      try {
+        const res = await fetch(`${this.url}/instance/connect/${instanceName}`, {
+          headers: this.headers(),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // count > 0 means QR was generated
+          const qrBase64 = data?.base64 || data?.qrcode?.base64 || null;
+          if (qrBase64 || (data?.count && data.count > 0)) {
+            console.log(`[evolution] QR ready after ${i + 1} retries`);
+            return { base64: qrBase64 || data?.base64 };
+          }
+          console.log(`[evolution] QR not ready yet (count=${data?.count}, attempt ${i + 1}/${retries})`);
+        }
+      } catch (e: any) {
+        console.warn(`[evolution] poll error: ${e.message}`);
+      }
     }
     return { base64: null };
   }
