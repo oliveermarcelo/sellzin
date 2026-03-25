@@ -79,8 +79,8 @@ export class EvolutionService {
       headers: this.headers(),
       body: JSON.stringify({
         url: webhookUrl,
-        byEvents: false,
-        base64: false,
+        webhook_by_events: false,
+        webhook_base64: true,
         events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
       }),
     });

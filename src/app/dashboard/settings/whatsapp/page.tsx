@@ -24,8 +24,35 @@ export default function WhatsAppSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [addModal, setAddModal] = useState(false);
   const [qrModal, setQrModal] = useState<any>(null);
+  const [qrPolling, setQrPolling] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Poll QR when modal is open without a QR
+  useEffect(() => {
+    if (!qrModal || qrModal.qr) return;
+    let attempts = 0;
+    const maxAttempts = 10;
+    setQrPolling(true);
+    const interval = setInterval(async () => {
+      attempts++;
+      try {
+        const data = await api.request(`/whatsapp/channels/${qrModal.channel.id}/qr`);
+        const qr = extractQrBase64(data.qr);
+        if (qr) {
+          setQrModal((prev: any) => prev ? { ...prev, qr } : null);
+          setQrPolling(false);
+          clearInterval(interval);
+          return;
+        }
+      } catch (e) {}
+      if (attempts >= maxAttempts) {
+        setQrPolling(false);
+        clearInterval(interval);
+      }
+    }, 3000);
+    return () => { clearInterval(interval); setQrPolling(false); };
+  }, [qrModal?.channel?.id, !!qrModal?.qr]);
 
   const [form, setForm] = useState({
     provider: "evolution",
@@ -306,8 +333,15 @@ export default function WhatsAppSettingsPage() {
               <img src={`data:image/png;base64,${qrModal.qr}`} alt="QR Code"
                 className="mx-auto w-64 h-64 rounded-lg border border-gray-200" />
             ) : (
-              <div className="w-64 h-64 mx-auto rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center">
-                <p className="text-sm text-gray-400">QR Code não disponível</p>
+              <div className="w-64 h-64 mx-auto rounded-lg border border-gray-200 bg-gray-50 flex flex-col items-center justify-center gap-2">
+                {qrPolling ? (
+                  <>
+                    <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+                    <p className="text-sm text-gray-400">Aguardando QR Code...</p>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-400">QR Code não disponível</p>
+                )}
               </div>
             )}
             <p className="text-xs text-gray-400">

@@ -49,8 +49,9 @@ export async function whatsappRoutes(app: FastifyInstance) {
         console.warn("[whatsapp] createInstance warning:", e.message);
       }
 
-      // Step 2: always try getQR (most reliable way)
+      // Step 2: wait for socket to be ready, then get QR
       if (!qrFromCreate) {
+        await new Promise(r => setTimeout(r, 3000)); // wait 3s for instance to init
         try {
           const qrResp = await svc.getQR(finalInstanceName);
           console.log("[whatsapp] getQR response:", JSON.stringify(qrResp).slice(0, 300));
