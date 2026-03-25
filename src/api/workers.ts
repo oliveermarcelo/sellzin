@@ -2,7 +2,7 @@
 import { Worker, Job } from "bullmq";
 import { redisConnection } from "../lib/redis";
 import { db } from "../lib/db";
-import { contacts, orders, abandonedCarts, webhookLogs, interactions, whatsappChannels } from "../lib/db/schema";
+import { contacts, orders, abandonedCarts, webhookLogs, interactions, whatsappChannels, stores } from "../lib/db/schema";
 import { EvolutionService, WhatsAppOfficialService } from "./services/whatsapp";
 import { eq, and, sql } from "drizzle-orm";
 
@@ -121,9 +121,7 @@ const syncWorker = new Worker("sync", async (job: Job) => {
   const store = await db.query.stores.findFirst({ where: eq(stores.id, storeId) });
   if (!store) return { error: "store_not_found" };
 
-  // Import stores to access it
-  const { stores: storesTable } = await import("../lib/db/schema");
-  await db.update(storesTable).set({ syncStatus: "syncing" }).where(eq(storesTable.id, storeId));
+  await db.update(stores).set({ syncStatus: "syncing" }).where(eq(stores.id, storeId));
 
   try {
     if (store.platform === "woocommerce") {
@@ -131,9 +129,9 @@ const syncWorker = new Worker("sync", async (job: Job) => {
     } else if (store.platform === "magento") {
       await syncMagento(store, tenantId);
     }
-    await db.update(storesTable).set({ syncStatus: "synced", lastSyncAt: new Date() }).where(eq(storesTable.id, storeId));
+    await db.update(stores).set({ syncStatus: "synced", lastSyncAt: new Date() }).where(eq(stores.id, storeId));
   } catch (err: any) {
-    await db.update(storesTable).set({ syncStatus: "error" }).where(eq(storesTable.id, storeId));
+    await db.update(stores).set({ syncStatus: "error" }).where(eq(stores.id, storeId));
     throw err;
   }
 }, { connection: redisConnection, concurrency: 1 });
