@@ -75,7 +75,7 @@ class ApiClient {
   // Stores
   getStores() { return this.request("/stores"); }
   createStore(data: any) { return this.request("/stores", { method: "POST", body: data }); }
-  syncStore(id: string) { return this.request(`/stores/${id}/sync`, { method: "POST" }); }
+  syncStore(id: string) { return this.request(`/stores/${id}/sync`, { method: "POST", body: {} }); }
   deleteStore(id: string) { return this.request(`/stores/${id}`, { method: "DELETE" }); }
 
   // Contacts
