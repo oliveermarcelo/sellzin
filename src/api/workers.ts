@@ -379,14 +379,17 @@ async function syncMagentoAbandonedCarts(store: any, tenantId: string) {
     });
 
     const url = `${store.apiUrl}/carts/search?${params}`;
+    console.log(`[sync] Fetching Magento carts: ${url}`);
     const res = await fetch(url, { headers: { Authorization: `Bearer ${store.apiKey}` } });
     if (!res.ok) {
-      console.warn(`[sync] Magento carts/search error: ${res.status}`);
+      const body = await res.text().catch(() => "");
+      console.warn(`[sync] Magento carts/search error: ${res.status} - ${body}`);
       break;
     }
 
     const data = await res.json();
     const quotes = data.items || [];
+    console.log(`[sync] Magento quotes found: ${quotes.length} (total: ${data.total_count})`);
     if (!quotes.length) break;
 
     for (const quote of quotes) {
