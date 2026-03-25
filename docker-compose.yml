@@ -84,18 +84,25 @@ services:
     ports:
       - "${EVOLUTION_PORT:-8080}:8080"
     environment:
-      - SERVER_URL=${EVOLUTION_API_URL:-http://evolution:8080}
+      - SERVER_URL=http://${VPS_IP:-localhost}:${EVOLUTION_PORT:-8080}
       - AUTHENTICATION_TYPE=apikey
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-sellzin-evolution-key}
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
-      - DATABASE_CONNECTION_URI=${DATABASE_URL}
+      - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER:-sellzin}:${POSTGRES_PASSWORD:-sellzin_secret}@postgres:5432/${POSTGRES_DB:-sellzin}
       - DATABASE_CONNECTION_CLIENT_NAME=evolution
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=false
+      - DATABASE_SAVE_MESSAGE_UPDATE=false
+      - DATABASE_SAVE_DATA_CONTACTS=false
+      - DATABASE_SAVE_DATA_CHATS=false
       - REDIS_ENABLED=true
-      - REDIS_URI=${REDIS_URL:-redis://redis:6379}
+      - REDIS_URI=redis://redis:6379
       - WEBHOOK_GLOBAL_ENABLED=false
       - LOG_LEVEL=ERROR
       - DEL_INSTANCE=false
+    volumes:
+      - evolution_data:/evolution/instances
     depends_on:
       postgres:
         condition: service_healthy
@@ -146,6 +153,8 @@ volumes:
   sellzin-pgdata:
     driver: local
   sellzin-redis:
+    driver: local
+  evolution_data:
     driver: local
 
 networks:
