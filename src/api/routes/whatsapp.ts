@@ -38,19 +38,33 @@ export async function whatsappRoutes(app: FastifyInstance) {
 
     if (provider === "evolution" && evolutionUrl && evolutionKey && finalInstanceName) {
       const svc = new EvolutionService(evolutionUrl, evolutionKey);
+
+      // Step 1: create instance (ignore if already exists)
       try {
         const created = await svc.createInstance(finalInstanceName);
-        // Evolution returns QR directly in createInstance response when qrcode: true
+        console.log("[whatsapp] createInstance response:", JSON.stringify(created).slice(0, 300));
+        // Some versions return QR in createInstance response
         qrFromCreate = created?.qrcode?.base64 || created?.hash?.qrcode?.base64 || null;
-        initialStatus = "connecting";
       } catch (e: any) {
         console.warn("[whatsapp] createInstance warning:", e.message);
-        // Instance may already exist — try to get status
       }
 
-      // Configure webhook to receive events
+      // Step 2: always try getQR (most reliable way)
+      if (!qrFromCreate) {
+        try {
+          const qrResp = await svc.getQR(finalInstanceName);
+          console.log("[whatsapp] getQR response:", JSON.stringify(qrResp).slice(0, 300));
+          qrFromCreate = qrResp?.base64 || qrResp?.qrcode?.base64 || qrResp?.code || null;
+        } catch (e: any) {
+          console.warn("[whatsapp] getQR warning:", e.message);
+        }
+      }
+
+      if (qrFromCreate) initialStatus = "connecting";
+
+      // Step 3: configure webhook
       try {
-        const apiUrl = process.env.API_URL || `http://localhost:3001`;
+        const apiUrl = process.env.API_URL || "http://localhost:3001";
         await svc.setWebhook(finalInstanceName, `${apiUrl}/v1/whatsapp/webhook/evolution/${finalInstanceName}`);
       } catch (e: any) {
         console.warn("[whatsapp] setWebhook warning:", e.message);
@@ -232,6 +246,40 @@ export async function whatsappRoutes(app: FastifyInstance) {
     }
 
     return { sent: true, result };
+  });
+
+  // ── Debug: test Evolution connection ──
+  app.get("/debug/evolution", { preHandler: [app.authenticate] }, async (req, reply) => {
+    const tenantId = req.user.tenantId;
+    const { evolutionUrl, evolutionKey, instanceName } = req.query as any;
+
+    const url = evolutionUrl || process.env.EVOLUTION_API_URL || "http://evolution:8080";
+    const key = evolutionKey || process.env.EVOLUTION_API_KEY || "sellzin-evolution-key";
+
+    try {
+      // Test connectivity
+      const healthRes = await fetch(`${url}/`, { headers: { apikey: key } });
+      const healthText = await healthRes.text();
+
+      let qrData = null;
+      if (instanceName) {
+        try {
+          const qrRes = await fetch(`${url}/instance/connect/${instanceName}`, { headers: { apikey: key } });
+          qrData = await qrRes.json();
+        } catch (e: any) { qrData = { error: e.message }; }
+      }
+
+      // List instances
+      let instances = null;
+      try {
+        const listRes = await fetch(`${url}/instance/fetchInstances`, { headers: { apikey: key } });
+        instances = await listRes.json();
+      } catch (e: any) { instances = { error: (e as any).message }; }
+
+      return { status: healthRes.status, health: healthText.slice(0, 200), instances, qrData };
+    } catch (e: any) {
+      return reply.code(500).send({ error: e.message });
+    }
   });
 
   // ── Evolution Webhook (public) ──
