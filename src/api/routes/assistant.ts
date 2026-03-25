@@ -70,8 +70,8 @@ const INTENT_PATTERNS: { intent: string; patterns: RegExp[] }[] = [
   { intent: "overview", patterns: [/como est(ão|a) (as vendas|o negócio|a loja|meu e-?commerce)/i, /visão geral/i, /dashboard/i, /resumo/i, /overview/i] },
   { intent: "revenue", patterns: [/faturamento/i, /receita/i, /vendas/i, /quanto (vendi|faturei|entrou)/i, /revenue/i, /ultim[ao]s?\s+\d+\s*(horas?|dias?|semanas?|m[eê]s)/i, /hoje/i, /essa semana/i, /esse m[eê]s/i] },
   { intent: "orders", patterns: [/pedidos/i, /orders/i, /encomendas/i, /quantos pedidos/i] },
-  { intent: "contacts_stats", patterns: [/quantos (clientes|contatos)/i, /clientes novos/i, /contatos/i, /meus clientes/i] },
-  { intent: "contacts_segment", patterns: [/vip/i, /champions/i, /leais/i, /loyal/i, /em risco/i, /at.risk/i, /inativos/i, /lost/i, /hibernating/i, /potenciais/i, /novos clientes/i] },
+  { intent: "contacts_stats", patterns: [/quantos (clientes|contatos)/i, /clientes novos/i, /^contatos$/i, /meus clientes$/i] },
+  { intent: "contacts_segment", patterns: [/vip/i, /champions/i, /leais/i, /loyal/i, /em risco/i, /at.risk/i, /inativos/i, /lost/i, /hibernating/i, /potenciais/i, /novos clientes/i, /melhores clientes/i, /top clientes/i, /clientes vip/i] },
   { intent: "search_contact", patterns: [/busca(r|) (cliente|contato)/i, /procura(r|) (cliente|contato)/i, /encontra(r|)/i, /quem é/i, /info(rmações|) (do|da|sobre)/i] },
   { intent: "carts", patterns: [/carrinho/i, /abandonad/i, /cart/i, /recupera(r|ção)/i] },
   { intent: "recover", patterns: [/recuperar/i, /disparar recuperação/i, /enviar lembrete/i, /mandar mensagem.*carrinho/i] },
@@ -100,6 +100,7 @@ function detectIntent(message: string): { intent: string; confidence: number } {
 function extractSegment(message: string): string | null {
   const map: Record<string, string> = {
     vip: "champions", campeões: "champions", champions: "champions",
+    "melhores clientes": "champions", "melhores": "champions", "top clientes": "champions",
     leais: "loyal", fiéis: "loyal", loyal: "loyal",
     potenciais: "potential", potential: "potential",
     novos: "new_customers", "novos clientes": "new_customers",
@@ -230,24 +231,45 @@ export default async function assistantRoutes(app: FastifyInstance) {
 
         // ── ORDERS ──
         case "orders": {
+          const isPending = /pendente|aguardando|processando|pendentes/i.test(message);
+          const isCancelled = /cancelad/i.test(message);
+          const isDelivered = /entregue|entregues|finalizado/i.test(message);
+
+          const statusFilter = isPending ? ["pending", "processing"]
+            : isCancelled ? ["cancelled"]
+            : isDelivered ? ["delivered"]
+            : null;
+
           const stats = await getOrdersSummary(tenantId);
+          const recentWhere = statusFilter
+            ? and(eq(orders.tenantId, tenantId), sql`${orders.status} = ANY(ARRAY[${sql.join(statusFilter.map(s => sql`${s}`), sql`, `)}])`)
+            : eq(orders.tenantId, tenantId);
+
           const recent = await db.query.orders.findMany({
-            where: eq(orders.tenantId, tenantId),
+            where: recentWhere,
             orderBy: [desc(orders.placedAt)],
-            limit: 5,
+            limit: 10,
             with: { contact: true },
           });
 
-          response = `📦 **Pedidos (30d)**\n\n`;
-          response += `Total: ${fmtN(stats.total)} pedidos | Faturamento: ${fmt(stats.totalRevenue)}\n`;
-          response += `Ticket médio: ${fmt(stats.avgValue)} | Aguardando envio: ${stats.pendingShipment}\n\n`;
-          response += `**Últimos pedidos:**\n`;
-          for (const o of recent) {
-            const name = o.contact ? `${o.contact.firstName} ${o.contact.lastName}` : "—";
-            response += `#${o.orderNumber} | ${name} | ${fmt(o.total || 0)} | ${o.status}\n`;
-          }
+          const label = isPending ? "Pedidos Pendentes/Em Processamento"
+            : isCancelled ? "Pedidos Cancelados"
+            : isDelivered ? "Pedidos Entregues"
+            : "Pedidos (30d)";
 
-          suggestions = ["Pedidos pendentes", "Faturamento da semana", "Top produtos"];
+          response = `📦 **${label}**\n\n`;
+          if (!statusFilter) {
+            response += `Total (30d): ${fmtN(stats.total)} | Faturamento: ${fmt(stats.totalRevenue)} | Ticket médio: ${fmt(stats.avgValue)}\n`;
+            response += `Aguardando envio: ${stats.pendingShipment}\n\n`;
+          }
+          response += `**${statusFilter ? `${recent.length} pedido(s) encontrado(s)` : "Últimos pedidos"}:**\n`;
+          for (const o of recent) {
+            const name = o.contact ? `${o.contact.firstName} ${o.contact.lastName}`.trim() : "—";
+            response += `#${o.orderNumber} | ${name} | ${fmt(o.total || 0)} | ${o.status} | ${new Date(o.placedAt).toLocaleDateString("pt-BR")}\n`;
+          }
+          if (statusFilter && recent.length === 0) response += "Nenhum pedido encontrado com esse filtro.\n";
+
+          suggestions = ["Faturamento da semana", "Top produtos", "Visão geral"];
           data = { stats, recent };
           break;
         }
