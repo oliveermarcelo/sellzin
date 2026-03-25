@@ -30,9 +30,9 @@ export default function WhatsAppSettingsPage() {
   const [form, setForm] = useState({
     provider: "evolution",
     name: "",
-    instanceName: "",
-    evolutionUrl: "",
-    evolutionKey: "",
+    instanceName: "sellzin",
+    evolutionUrl: "http://evolution:8080",
+    evolutionKey: "sellzin-evolution-key",
     phoneNumberId: "",
     accessToken: "",
     verifyToken: "",
