@@ -129,6 +129,17 @@ class ApiClient {
   getRevenue(group = "day") { return this.request(`/analytics/revenue?group=${group}`); }
   getComparison() { return this.request("/analytics/compare"); }
 
+  // WhatsApp
+  getWhatsappChannels() { return this.request("/whatsapp/channels"); }
+  createWhatsappChannel(data: any) { return this.request("/whatsapp/channels", { method: "POST", body: data }); }
+  getWhatsappChannel(id: string) { return this.request(`/whatsapp/channels/${id}`); }
+  deleteWhatsappChannel(id: string) { return this.request(`/whatsapp/channels/${id}`, { method: "DELETE" }); }
+  getWhatsappQR(id: string) { return this.request(`/whatsapp/channels/${id}/qr`); }
+  reconnectWhatsapp(id: string) { return this.request(`/whatsapp/channels/${id}/reconnect`, { method: "POST" }); }
+  sendWhatsapp(data: { channelId?: string; phone: string; message: string; contactId?: string }) {
+    return this.request("/whatsapp/send", { method: "POST", body: data });
+  }
+
   // Assistant
   assistantChat(message: string, conversationId?: string) {
     return this.request("/assistant/chat", { method: "POST", body: { message, conversationId } });

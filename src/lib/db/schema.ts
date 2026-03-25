@@ -19,6 +19,8 @@ import { relations } from "drizzle-orm";
 // ── Enums ──
 
 export const planEnum = pgEnum("plan", ["starter", "growth", "enterprise"]);
+export const whatsappProviderEnum = pgEnum("whatsapp_provider", ["evolution", "official"]);
+export const whatsappStatusEnum = pgEnum("whatsapp_status", ["disconnected", "connecting", "connected", "error"]);
 export const platformEnum = pgEnum("platform", ["woocommerce", "magento"]);
 export const orderStatusEnum = pgEnum("order_status", [
   "pending",
@@ -353,6 +355,40 @@ export const assistantMessages = pgTable(
   })
 );
 
+// ── WhatsApp Channels ──
+
+export const whatsappChannels = pgTable(
+  "whatsapp_channels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    provider: whatsappProviderEnum("provider").notNull(),
+    // Evolution API
+    instanceName: varchar("instance_name", { length: 255 }),
+    evolutionUrl: varchar("evolution_url", { length: 500 }),
+    evolutionKey: varchar("evolution_key", { length: 255 }),
+    // WhatsApp Business API (Official)
+    phoneNumberId: varchar("phone_number_id", { length: 100 }),
+    accessToken: text("access_token"),
+    verifyToken: varchar("verify_token", { length: 255 }),
+    businessAccountId: varchar("business_account_id", { length: 100 }),
+    // Status
+    status: whatsappStatusEnum("status").notNull().default("disconnected"),
+    phoneNumber: varchar("phone_number", { length: 50 }),
+    qrCode: text("qr_code"),
+    isActive: boolean("is_active").notNull().default(true),
+    connectedAt: timestamp("connected_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantIdx: index("whatsapp_channels_tenant_idx").on(table.tenantId),
+  })
+);
+
 // ── Webhook Logs ──
 
 export const webhookLogs = pgTable(
@@ -386,6 +422,11 @@ export const tenantsRelations = relations(tenants, ({ many }) => ({
   campaigns: many(campaigns),
   automations: many(automations),
   assistantMessages: many(assistantMessages),
+  whatsappChannels: many(whatsappChannels),
+}));
+
+export const whatsappChannelsRelations = relations(whatsappChannels, ({ one }) => ({
+  tenant: one(tenants, { fields: [whatsappChannels.tenantId], references: [tenants.id] }),
 }));
 
 export const storesRelations = relations(stores, ({ one, many }) => ({

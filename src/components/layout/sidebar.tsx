@@ -22,6 +22,7 @@ const navItems = [
 
 const bottomItems = [
   { href: "/dashboard/settings", label: "Configurações", icon: Settings },
+  { href: "/dashboard/settings/whatsapp", label: "WhatsApp", icon: MessageSquare },
   { href: "/dashboard/settings/stores", label: "Lojas", icon: Store },
 ];
 

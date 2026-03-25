@@ -2,7 +2,8 @@
 import { Worker, Job } from "bullmq";
 import { redisConnection } from "../lib/redis";
 import { db } from "../lib/db";
-import { contacts, orders, abandonedCarts, webhookLogs, interactions } from "../lib/db/schema";
+import { contacts, orders, abandonedCarts, webhookLogs, interactions, whatsappChannels } from "../lib/db/schema";
+import { EvolutionService, WhatsAppOfficialService } from "./services/whatsapp";
 import { eq, and, sql } from "drizzle-orm";
 
 // ── Webhook Worker ──
@@ -26,34 +27,45 @@ const webhookWorker = new Worker("webhooks", async (job: Job) => {
 
 // ── WhatsApp Worker ──
 const whatsappWorker = new Worker("whatsapp", async (job: Job) => {
-  const { tenantId, phone, message, contactId } = job.data;
+  const { tenantId, phone, message, contactId, channelId } = job.data;
   console.log(`[whatsapp] Sending to ${phone}`);
 
-  const EVOLUTION_URL = process.env.EVOLUTION_API_URL;
-  const EVOLUTION_KEY = process.env.EVOLUTION_API_KEY;
+  // Find active channel for tenant
+  const channel = channelId
+    ? await db.query.whatsappChannels.findFirst({ where: and(eq(whatsappChannels.id, channelId), eq(whatsappChannels.tenantId, tenantId)) })
+    : await db.query.whatsappChannels.findFirst({ where: and(eq(whatsappChannels.tenantId, tenantId), eq(whatsappChannels.isActive, true)) });
 
-  if (!EVOLUTION_URL || !EVOLUTION_KEY) {
-    console.warn("[whatsapp] Evolution API not configured");
-    return { sent: false, reason: "not_configured" };
+  // Fallback to env-based Evolution API
+  if (!channel) {
+    const EVOLUTION_URL = process.env.EVOLUTION_API_URL;
+    const EVOLUTION_KEY = process.env.EVOLUTION_API_KEY;
+    if (!EVOLUTION_URL || !EVOLUTION_KEY) {
+      console.warn("[whatsapp] No channel configured");
+      return { sent: false, reason: "not_configured" };
+    }
+    const svc = new EvolutionService(EVOLUTION_URL, EVOLUTION_KEY);
+    const result = await svc.sendText("sellzin", phone, message);
+    if (contactId) {
+      await db.insert(interactions).values({ tenantId, contactId, channel: "whatsapp", type: "message_sent", content: message, metadata: { result } });
+    }
+    return { sent: true, result };
   }
 
   try {
-    const response = await fetch(`${EVOLUTION_URL}/message/sendText/sellzin`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: EVOLUTION_KEY },
-      body: JSON.stringify({
-        number: phone.replace(/\D/g, ""),
-        text: message,
-      }),
-    });
-
-    const result = await response.json();
+    let result: any;
+    if (channel.provider === "evolution") {
+      const svc = new EvolutionService(channel.evolutionUrl!, channel.evolutionKey!);
+      result = await svc.sendText(channel.instanceName!, phone, message);
+    } else {
+      const svc = new WhatsAppOfficialService(channel.phoneNumberId!, channel.accessToken!);
+      result = await svc.sendText(phone, message);
+    }
 
     if (contactId) {
       await db.insert(interactions).values({
         tenantId, contactId, channel: "whatsapp",
         type: "message_sent", content: message,
-        metadata: { evolutionResponse: result },
+        metadata: { provider: channel.provider, channelId: channel.id, result },
       });
     }
 
