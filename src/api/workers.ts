@@ -351,6 +351,98 @@ async function syncMagento(store: any, tenantId: string) {
     if (magentoOrders.length < pageSize) break;
     page++;
   }
+
+  // Sync abandoned carts (quotes ativas há mais de 1h)
+  await syncMagentoAbandonedCarts(store, tenantId);
+}
+
+// ── Helper: Sync Magento Abandoned Carts (quotes) ──
+async function syncMagentoAbandonedCarts(store: any, tenantId: string) {
+  const abandonedThreshold = new Date(Date.now() - 60 * 60 * 1000).toISOString().replace("T", " ").substring(0, 19);
+  let page = 1;
+  const pageSize = 100;
+
+  while (true) {
+    // Busca quotes ativas, com itens, atualizadas há mais de 1h
+    const params = new URLSearchParams({
+      "searchCriteria[filterGroups][0][filters][0][field]": "is_active",
+      "searchCriteria[filterGroups][0][filters][0][value]": "1",
+      "searchCriteria[filterGroups][0][filters][0][conditionType]": "eq",
+      "searchCriteria[filterGroups][1][filters][0][field]": "updated_at",
+      "searchCriteria[filterGroups][1][filters][0][value]": abandonedThreshold,
+      "searchCriteria[filterGroups][1][filters][0][conditionType]": "lt",
+      "searchCriteria[filterGroups][2][filters][0][field]": "items_count",
+      "searchCriteria[filterGroups][2][filters][0][value]": "0",
+      "searchCriteria[filterGroups][2][filters][0][conditionType]": "gt",
+      "searchCriteria[pageSize]": String(pageSize),
+      "searchCriteria[currentPage]": String(page),
+    });
+
+    const url = `${store.apiUrl}/carts/search?${params}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${store.apiKey}` } });
+    if (!res.ok) {
+      console.warn(`[sync] Magento carts/search error: ${res.status}`);
+      break;
+    }
+
+    const data = await res.json();
+    const quotes = data.items || [];
+    if (!quotes.length) break;
+
+    for (const quote of quotes) {
+      const email = quote.customer?.email || quote.billing_address?.email;
+      if (!email && !quote.customer_email) continue; // sem identificação, pula
+
+      const customerEmail = email || quote.customer_email;
+      const items = (quote.items || []).map((i: any) => ({
+        name: i.name, sku: i.sku, quantity: i.qty, price: i.price,
+        total: String((parseFloat(i.price) || 0) * (parseFloat(i.qty) || 1)),
+      }));
+      if (!items.length) continue;
+
+      const total = String(quote.grand_total || quote.subtotal || 0);
+      const abandonedAt = quote.updated_at ? new Date(quote.updated_at) : new Date();
+      const checkoutUrl = `${store.apiUrl.replace(/\/rest.*/, "")}/checkout/cart`;
+
+      // Resolve contact
+      let contactId: string | null = null;
+      if (customerEmail) {
+        const existing = await db.query.contacts.findFirst({
+          where: and(eq(contacts.tenantId, tenantId), eq(contacts.email, customerEmail)),
+        });
+        if (existing) {
+          contactId = existing.id;
+        } else {
+          const [newContact] = await db.insert(contacts).values({
+            tenantId, storeId: store.id,
+            email: customerEmail,
+            firstName: quote.customer?.firstname || quote.billing_address?.firstname,
+            lastName: quote.customer?.lastname || quote.billing_address?.lastname,
+            phone: quote.billing_address?.telephone,
+          }).returning({ id: contacts.id });
+          contactId = newContact.id;
+        }
+      }
+
+      // Upsert abandoned cart
+      await db.insert(abandonedCarts).values({
+        tenantId, storeId: store.id, contactId,
+        externalId: String(quote.id),
+        email: customerEmail,
+        phone: quote.billing_address?.telephone,
+        items,
+        total,
+        checkoutUrl,
+        abandonedAt,
+      }).onConflictDoUpdate({
+        target: [abandonedCarts.storeId, abandonedCarts.externalId],
+        set: { items, total, abandonedAt, updatedAt: new Date() },
+      });
+    }
+
+    if (quotes.length < pageSize) break;
+    page++;
+  }
 }
 
 // ── Status Mappers ──

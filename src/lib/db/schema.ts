@@ -233,11 +233,13 @@ export const abandonedCarts = pgTable(
     isRecovered: boolean("is_recovered").notNull().default(false),
     abandonedAt: timestamp("abandoned_at").notNull().defaultNow(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (table) => ({
     tenantIdx: index("carts_tenant_idx").on(table.tenantId),
     recoveredIdx: index("carts_recovered_idx").on(table.tenantId, table.isRecovered),
     abandonedAtIdx: index("carts_abandoned_at_idx").on(table.tenantId, table.abandonedAt),
+    externalIdx: uniqueIndex("carts_external_idx").on(table.storeId, table.externalId),
   })
 );
 
