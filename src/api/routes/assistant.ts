@@ -463,17 +463,21 @@ export default async function assistantRoutes(app: FastifyInstance) {
             SELECT
               item->>'name' as name,
               item->>'sku' as sku,
-              SUM((item->>'quantity')::int) as total_quantity,
-              SUM((item->>'total')::numeric) as total_revenue
-            FROM orders, jsonb_array_elements(items::jsonb) as item
+              SUM(COALESCE((item->>'quantity')::numeric, 1)) as total_quantity,
+              SUM(COALESCE(
+                NULLIF(item->>'total', '')::numeric,
+                (COALESCE(NULLIF(item->>'price', '')::numeric, 0)) * COALESCE((item->>'quantity')::numeric, 1)
+              )) as total_revenue
+            FROM orders, jsonb_array_elements(CASE WHEN jsonb_typeof(items::jsonb) = 'array' THEN items::jsonb ELSE '[]'::jsonb END) as item
             WHERE tenant_id = ${tenantId}
-              AND placed_at >= NOW() - INTERVAL '30 days'
+              AND placed_at >= NOW() - INTERVAL '90 days'
+              AND item->>'name' IS NOT NULL
             GROUP BY item->>'name', item->>'sku'
             ORDER BY total_revenue DESC
             LIMIT 10
           `);
 
-          response = `🏆 **Top Produtos (30 dias)**\n\n`;
+          response = `🏆 **Top Produtos (90 dias)**\n\n`;
           const products = topProducts.rows || [];
           if (products.length === 0) {
             response += "Sem dados de produtos ainda. Conecte uma loja para começar.";
