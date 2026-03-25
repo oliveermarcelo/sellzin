@@ -136,17 +136,17 @@ export default function AutomationsPage() {
       <PageHeader title="Automações" description="Fluxos automáticos de engajamento" />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        <div className="bg-[#0f0f12] border border-zinc-800/60 rounded-xl p-5 text-center">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 text-center">
           <p className="text-2xl font-bold text-white">{automations.filter(a => a.active).length}</p>
-          <p className="text-xs text-zinc-500">Ativas</p>
+          <p className="text-xs text-gray-500">Ativas</p>
         </div>
-        <div className="bg-[#0f0f12] border border-zinc-800/60 rounded-xl p-5 text-center">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 text-center">
           <p className="text-2xl font-bold text-white">{automations.reduce((s, a) => s + a.executions, 0)}</p>
-          <p className="text-xs text-zinc-500">Execuções</p>
+          <p className="text-xs text-gray-500">Execuções</p>
         </div>
-        <div className="bg-[#0f0f12] border border-zinc-800/60 rounded-xl p-5 text-center">
+        <div className="bg-white border border-gray-200 rounded-xl p-5 text-center">
           <p className="text-2xl font-bold text-white">{automations.reduce((s, a) => s + a.conversions, 0)}</p>
-          <p className="text-xs text-zinc-500">Conversões</p>
+          <p className="text-xs text-gray-500">Conversões</p>
         </div>
       </div>
 
@@ -154,15 +154,15 @@ export default function AutomationsPage() {
         {automations.map((a) => {
           const Icon = a.icon;
           return (
-            <div key={a.id} className={`bg-[#0f0f12] border rounded-xl p-5 transition ${a.active ? "border-indigo-500/30" : "border-zinc-800/60"}`}>
+            <div key={a.id} className={`bg-white border rounded-xl p-5 transition ${a.active ? "border-indigo-500/30" : "border-gray-200"}`}>
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: a.color + "15" }}>
                     <Icon className="w-4 h-4" style={{ color: a.color }} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-zinc-200">{a.name}</h3>
-                    <p className="text-xs text-zinc-600">{a.description}</p>
+                    <h3 className="text-sm font-semibold text-gray-800">{a.name}</h3>
+                    <p className="text-xs text-gray-400">{a.description}</p>
                   </div>
                 </div>
                 <button onClick={() => toggleAutomation(a.id)}
@@ -173,22 +173,22 @@ export default function AutomationsPage() {
 
               <div className="flex items-center gap-1 mb-3">
                 <Badge color={a.color} size="xs">{triggerLabels[a.trigger]}</Badge>
-                <ArrowRight className="w-3 h-3 text-zinc-700" />
+                <ArrowRight className="w-3 h-3 text-gray-400" />
                 {a.actions.map((action, i) => {
                   const ActionIcon = actionIcons[action.type] || Zap;
                   return (
                     <div key={i} className="flex items-center gap-1">
-                      <div className="w-5 h-5 rounded bg-zinc-800 flex items-center justify-center" title={action.message || action.delay}>
-                        <ActionIcon className="w-3 h-3 text-zinc-500" />
+                      <div className="w-5 h-5 rounded bg-gray-100 flex items-center justify-center" title={action.message || action.delay}>
+                        <ActionIcon className="w-3 h-3 text-gray-500" />
                       </div>
-                      {i < a.actions.length - 1 && <ArrowRight className="w-2.5 h-2.5 text-zinc-700" />}
+                      {i < a.actions.length - 1 && <ArrowRight className="w-2.5 h-2.5 text-gray-400" />}
                     </div>
                   );
                 })}
               </div>
 
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4 text-xs text-zinc-600">
+                <div className="flex items-center gap-4 text-xs text-gray-400">
                   <span>{a.executions} execuções</span>
                   <span>{a.conversions} conversões</span>
                 </div>
@@ -205,29 +205,29 @@ export default function AutomationsPage() {
       <Modal open={!!detailModal} onClose={() => setDetailModal(null)} title={detailModal?.name || ""} size="md">
         {detailModal && (
           <div className="space-y-4">
-            <div className="bg-zinc-900/50 rounded-lg p-3">
-              <h4 className="text-xs font-semibold text-zinc-400 mb-1">Gatilho</h4>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <h4 className="text-xs font-semibold text-gray-600 mb-1">Gatilho</h4>
               <Badge color={detailModal.color}>{triggerLabels[detailModal.trigger]}</Badge>
             </div>
 
             <div>
-              <h4 className="text-xs font-semibold text-zinc-400 mb-3">Fluxo de Ações</h4>
+              <h4 className="text-xs font-semibold text-gray-600 mb-3">Fluxo de Ações</h4>
               <div className="space-y-3">
                 {detailModal.actions.map((action: any, i: number) => {
                   const ActionIcon = actionIcons[action.type] || Zap;
                   return (
                     <div key={i} className="flex items-start gap-3">
                       <div className="flex flex-col items-center">
-                        <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center">
-                          <ActionIcon className="w-4 h-4 text-zinc-400" />
+                        <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                          <ActionIcon className="w-4 h-4 text-gray-600" />
                         </div>
-                        {i < detailModal.actions.length - 1 && <div className="w-px h-6 bg-zinc-800" />}
+                        {i < detailModal.actions.length - 1 && <div className="w-px h-6 bg-gray-100" />}
                       </div>
                       <div className="pt-1">
-                        <p className="text-sm font-medium text-zinc-300">
+                        <p className="text-sm font-medium text-gray-700">
                           {action.type === "wait" ? `Aguardar ${action.delay}` : action.type === "whatsapp" ? "WhatsApp" : action.type}
                         </p>
-                        {action.message && <p className="text-xs text-zinc-500 mt-0.5">{action.message}</p>}
+                        {action.message && <p className="text-xs text-gray-500 mt-0.5">{action.message}</p>}
                       </div>
                     </div>
                   );
@@ -236,7 +236,7 @@ export default function AutomationsPage() {
             </div>
 
             <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-lg p-3">
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-gray-500">
                 <Zap className="w-3 h-3 inline mr-1 text-indigo-400" />
                 As mensagens são geradas automaticamente pela IA com base no perfil do cliente e contexto da compra.
               </p>

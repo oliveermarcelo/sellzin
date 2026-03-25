@@ -65,7 +65,7 @@ export default function StoresPage() {
       case "synced": return <CheckCircle className="w-4 h-4 text-emerald-400" />;
       case "syncing": return <RefreshCw className="w-4 h-4 text-indigo-400 animate-spin" />;
       case "error": return <AlertCircle className="w-4 h-4 text-red-400" />;
-      default: return <Clock className="w-4 h-4 text-zinc-500" />;
+      default: return <Clock className="w-4 h-4 text-gray-500" />;
     }
   };
 
@@ -93,13 +93,13 @@ export default function StoresPage() {
       ) : (
         <div className="space-y-4">
           {stores.map((store: any) => (
-            <div key={store.id} className="bg-[#0f0f12] border border-zinc-800/60 rounded-xl p-5">
+            <div key={store.id} className="bg-white border border-gray-200 rounded-xl p-5">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{platformLogos[store.platform]}</span>
                   <div>
-                    <h3 className="text-sm font-semibold text-zinc-200">{store.name}</h3>
-                    <p className="text-xs text-zinc-500">{store.platform === "woocommerce" ? "WooCommerce" : "Magento 2"} · {store.apiUrl}</p>
+                    <h3 className="text-sm font-semibold text-gray-800">{store.name}</h3>
+                    <p className="text-xs text-gray-500">{store.platform === "woocommerce" ? "WooCommerce" : "Magento 2"} · {store.apiUrl}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -112,19 +112,19 @@ export default function StoresPage() {
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                 <div className="bg-zinc-900/40 rounded-lg p-3">
-                  <p className="text-xs text-zinc-500">Status sync</p>
-                  <p className="text-sm font-medium text-zinc-300 capitalize">{store.syncStatus || "pendente"}</p>
+                  <p className="text-xs text-gray-500">Status sync</p>
+                  <p className="text-sm font-medium text-gray-700 capitalize">{store.syncStatus || "pendente"}</p>
                 </div>
                 <div className="bg-zinc-900/40 rounded-lg p-3">
-                  <p className="text-xs text-zinc-500">Último sync</p>
-                  <p className="text-sm font-medium text-zinc-300">{formatRelativeTime(store.lastSyncAt)}</p>
+                  <p className="text-xs text-gray-500">Último sync</p>
+                  <p className="text-sm font-medium text-gray-700">{formatRelativeTime(store.lastSyncAt)}</p>
                 </div>
                 <div className="bg-zinc-900/40 rounded-lg p-3">
-                  <p className="text-xs text-zinc-500">Conectada em</p>
-                  <p className="text-sm font-medium text-zinc-300">{formatDate(store.createdAt)}</p>
+                  <p className="text-xs text-gray-500">Conectada em</p>
+                  <p className="text-sm font-medium text-gray-700">{formatDate(store.createdAt)}</p>
                 </div>
                 <div className="bg-zinc-900/40 rounded-lg p-3">
-                  <p className="text-xs text-zinc-500">Webhook</p>
+                  <p className="text-xs text-gray-500">Webhook</p>
                   <button onClick={() => copyWebhook(store.id, store.platform)}
                     className="text-sm font-medium text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
                     {copied === store.id ? <><Check className="w-3 h-3" /> Copiado</> : <><Copy className="w-3 h-3" /> Copiar URL</>}
@@ -175,18 +175,18 @@ export default function StoresPage() {
           )}
 
           {/* Instructions */}
-          <div className="bg-zinc-900/50 rounded-lg p-4">
-            <h4 className="text-xs font-semibold text-zinc-400 mb-2">
+          <div className="bg-gray-50 rounded-lg p-4">
+            <h4 className="text-xs font-semibold text-gray-600 mb-2">
               {form.platform === "woocommerce" ? "Como obter as credenciais WooCommerce:" : "Como obter o token Magento:"}
             </h4>
             {form.platform === "woocommerce" ? (
-              <ol className="text-xs text-zinc-500 space-y-1 list-decimal list-inside">
+              <ol className="text-xs text-gray-500 space-y-1 list-decimal list-inside">
                 <li>Acesse WordPress Admin → WooCommerce → Configurações → Avançado → REST API</li>
                 <li>Clique em "Adicionar chave" com permissão de Leitura/Escrita</li>
                 <li>Copie Consumer Key e Consumer Secret</li>
               </ol>
             ) : (
-              <ol className="text-xs text-zinc-500 space-y-1 list-decimal list-inside">
+              <ol className="text-xs text-gray-500 space-y-1 list-decimal list-inside">
                 <li>Acesse Admin → System → Integrations → Add New</li>
                 <li>Configure os recursos com acesso a Sales, Customers, Catalog</li>
                 <li>Ative e copie o Access Token</li>

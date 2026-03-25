@@ -70,7 +70,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Revenue Chart */}
-      <div className="bg-[#0f0f12] border border-zinc-800/60 rounded-xl p-5 mb-6">
+      <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-white">Faturamento</h3>
           <Tabs tabs={[
@@ -87,10 +87,10 @@ export default function AnalyticsPage() {
                 const height = maxRevenue > 0 ? (d.revenue / maxRevenue) * 100 : 0;
                 return (
                   <div key={i} className="flex-1 min-w-0 group relative">
-                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-zinc-800 text-white text-[10px] px-2 py-1.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none z-10 shadow-lg">
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-100 text-white text-[10px] px-2 py-1.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none z-10 shadow-lg">
                       <p className="font-semibold">{formatCurrency(d.revenue)}</p>
-                      <p className="text-zinc-400">{d.orders} pedidos</p>
-                      <p className="text-zinc-500">{new Date(d.period).toLocaleDateString("pt-BR")}</p>
+                      <p className="text-gray-600">{d.orders} pedidos</p>
+                      <p className="text-gray-500">{new Date(d.period).toLocaleDateString("pt-BR")}</p>
                     </div>
                     <div className="w-full rounded-sm bg-indigo-500/30 hover:bg-indigo-400/50 transition-all cursor-pointer"
                       style={{ height: `${Math.max(height, 2)}%` }} />
@@ -98,19 +98,19 @@ export default function AnalyticsPage() {
                 );
               })}
             </div>
-            <div className="flex justify-between mt-2 text-[10px] text-zinc-600">
+            <div className="flex justify-between mt-2 text-[10px] text-gray-400">
               <span>{revenueData[0] ? new Date(revenueData[0].period).toLocaleDateString("pt-BR", { month: "short", day: "numeric" }) : ""}</span>
               <span>{revenueData.length > 0 ? new Date(revenueData[revenueData.length - 1].period).toLocaleDateString("pt-BR", { month: "short", day: "numeric" }) : ""}</span>
             </div>
           </div>
         ) : (
-          <div className="h-56 flex items-center justify-center text-zinc-700 text-sm">Sem dados ainda</div>
+          <div className="h-56 flex items-center justify-center text-gray-400 text-sm">Sem dados ainda</div>
         )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         {/* RFM Segments */}
-        <div className="bg-[#0f0f12] border border-zinc-800/60 rounded-xl p-5">
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
           <h3 className="text-sm font-semibold text-white mb-4">Distribuição RFM</h3>
           {segments.length > 0 ? (
             <div className="space-y-4">
@@ -121,14 +121,14 @@ export default function AnalyticsPage() {
                     <div className="flex items-center justify-between mb-1.5">
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: getSegmentColor(s.segment) }} />
-                        <span className="text-xs font-medium text-zinc-300">{getSegmentLabel(s.segment)}</span>
+                        <span className="text-xs font-medium text-gray-700">{getSegmentLabel(s.segment)}</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-xs text-zinc-500">{s.count} ({pct.toFixed(0)}%)</span>
-                        <span className="text-xs font-medium text-zinc-400">{formatCurrency(s.totalSpent)}</span>
+                        <span className="text-xs text-gray-500">{s.count} ({pct.toFixed(0)}%)</span>
+                        <span className="text-xs font-medium text-gray-600">{formatCurrency(s.totalSpent)}</span>
                       </div>
                     </div>
-                    <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: getSegmentColor(s.segment) }} />
                     </div>
                   </div>
@@ -136,12 +136,12 @@ export default function AnalyticsPage() {
               })}
             </div>
           ) : (
-            <div className="h-40 flex items-center justify-center text-zinc-700 text-sm">Sem dados</div>
+            <div className="h-40 flex items-center justify-center text-gray-400 text-sm">Sem dados</div>
           )}
         </div>
 
         {/* Top Products */}
-        <div className="bg-[#0f0f12] border border-zinc-800/60 rounded-xl p-5">
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
           <h3 className="text-sm font-semibold text-white mb-4">Top Produtos (30 dias)</h3>
           {topProducts.length > 0 ? (
             <div className="space-y-3">
@@ -152,15 +152,15 @@ export default function AnalyticsPage() {
                   <div key={i}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-zinc-600 w-5">{i + 1}</span>
-                        <span className="text-xs text-zinc-300 truncate max-w-[200px]">{p.name}</span>
+                        <span className="text-xs font-bold text-gray-400 w-5">{i + 1}</span>
+                        <span className="text-xs text-gray-700 truncate max-w-[200px]">{p.name}</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-[10px] text-zinc-600">{p.total_quantity}un</span>
-                        <span className="text-xs font-semibold text-zinc-300">{formatCurrency(p.total_revenue)}</span>
+                        <span className="text-[10px] text-gray-400">{p.total_quantity}un</span>
+                        <span className="text-xs font-semibold text-gray-700">{formatCurrency(p.total_revenue)}</span>
                       </div>
                     </div>
-                    <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full bg-indigo-500/50 rounded-full" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
@@ -168,14 +168,14 @@ export default function AnalyticsPage() {
               })}
             </div>
           ) : (
-            <div className="h-40 flex items-center justify-center text-zinc-700 text-sm">Sem dados</div>
+            <div className="h-40 flex items-center justify-center text-gray-400 text-sm">Sem dados</div>
           )}
         </div>
       </div>
 
       {/* Comparison Table */}
       {current && previous && (
-        <div className="bg-[#0f0f12] border border-zinc-800/60 rounded-xl p-5">
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
           <h3 className="text-sm font-semibold text-white mb-4">Comparativo Semanal</h3>
           <div className="grid grid-cols-3 gap-4">
             {[
@@ -185,7 +185,7 @@ export default function AnalyticsPage() {
                 change: previous.avg_value > 0 ? (((current.avg_value - previous.avg_value) / previous.avg_value) * 100).toFixed(1) : "0" },
             ].map((m) => (
               <div key={m.label} className="text-center">
-                <p className="text-xs text-zinc-500 mb-2">{m.label}</p>
+                <p className="text-xs text-gray-500 mb-2">{m.label}</p>
                 <p className="text-lg font-bold text-white">{m.current}</p>
                 <div className="flex items-center justify-center gap-1 mt-1">
                   {parseFloat(m.change) >= 0 ? (
@@ -197,7 +197,7 @@ export default function AnalyticsPage() {
                     {m.change}%
                   </span>
                 </div>
-                <p className="text-[10px] text-zinc-600 mt-0.5">Anterior: {m.previous}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">Anterior: {m.previous}</p>
               </div>
             ))}
           </div>

@@ -84,29 +84,29 @@ export default function OrdersPage() {
         {loading ? (
           <tr><td colSpan={6}><Loading /></td></tr>
         ) : orders.map((o: any) => (
-          <tr key={o.id} className="hover:bg-zinc-800/20 cursor-pointer transition" onClick={() => openDetail(o.id)}>
+          <tr key={o.id} className="hover:bg-gray-50 cursor-pointer transition" onClick={() => openDetail(o.id)}>
             <td className="px-4 py-3">
               <div>
-                <p className="text-sm font-medium text-zinc-200">#{o.orderNumber || o.externalId}</p>
-                <p className="text-[10px] text-zinc-600">{o.store?.name}</p>
+                <p className="text-sm font-medium text-gray-900">#{o.orderNumber || o.externalId}</p>
+                <p className="text-[10px] text-gray-400">{o.store?.name}</p>
               </div>
             </td>
             <td className="px-4 py-3">
               {o.contact ? (
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-400">
+                  <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-600">
                     {getInitials(o.contact.firstName, o.contact.lastName)}
                   </div>
-                  <span className="text-sm text-zinc-300">{o.contact.firstName} {o.contact.lastName}</span>
+                  <span className="text-sm text-gray-800">{o.contact.firstName} {o.contact.lastName}</span>
                 </div>
-              ) : <span className="text-sm text-zinc-600">—</span>}
+              ) : <span className="text-sm text-gray-400">—</span>}
             </td>
             <td className="px-4 py-3">
               <Badge color={getStatusColor(o.status)}>{getStatusLabel(o.status)}</Badge>
             </td>
-            <td className="px-4 py-3 text-xs text-zinc-500">{o.paymentMethod || "—"}</td>
-            <td className="px-4 py-3 text-sm font-semibold text-zinc-300">{formatCurrency(o.total)}</td>
-            <td className="px-4 py-3 text-xs text-zinc-500">{formatRelativeTime(o.placedAt)}</td>
+            <td className="px-4 py-3 text-xs text-gray-500">{o.paymentMethod || "—"}</td>
+            <td className="px-4 py-3 text-sm font-semibold text-gray-900">{formatCurrency(o.total)}</td>
+            <td className="px-4 py-3 text-xs text-gray-500">{formatRelativeTime(o.placedAt)}</td>
           </tr>
         ))}
       </Table>
@@ -120,69 +120,69 @@ export default function OrdersPage() {
           <div className="space-y-5">
             <div className="flex items-center justify-between">
               <Badge color={getStatusColor(selectedOrder.status)} size="sm">{getStatusLabel(selectedOrder.status)}</Badge>
-              <span className="text-xs text-zinc-600">{formatDate(selectedOrder.placedAt, true)}</span>
+              <span className="text-xs text-gray-500">{formatDate(selectedOrder.placedAt, true)}</span>
             </div>
 
             {/* Customer info */}
             {selectedOrder.contact && (
-              <div className="bg-zinc-900/50 rounded-lg p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold text-zinc-400">
+              <div className="bg-gray-50 border border-gray-100 rounded-lg p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-sm font-bold text-gray-600">
                   {getInitials(selectedOrder.contact.firstName, selectedOrder.contact.lastName)}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-zinc-200">{selectedOrder.contact.firstName} {selectedOrder.contact.lastName}</p>
-                  <p className="text-xs text-zinc-500">{selectedOrder.contact.email} · {selectedOrder.contact.phone}</p>
+                  <p className="text-sm font-medium text-gray-900">{selectedOrder.contact.firstName} {selectedOrder.contact.lastName}</p>
+                  <p className="text-xs text-gray-500">{selectedOrder.contact.email} · {selectedOrder.contact.phone}</p>
                 </div>
               </div>
             )}
 
             {/* Items */}
             <div>
-              <h4 className="text-xs font-semibold text-zinc-400 mb-2">Itens</h4>
+              <h4 className="text-xs font-semibold text-gray-500 mb-2">Itens</h4>
               <div className="space-y-2">
                 {(selectedOrder.items || []).map((item: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between py-2 px-3 bg-zinc-900/30 rounded-lg">
+                  <div key={i} className="flex items-center justify-between py-2 px-3 bg-gray-50 border border-gray-100 rounded-lg">
                     <div>
-                      <p className="text-sm text-zinc-300">{item.name}</p>
-                      <p className="text-xs text-zinc-600">SKU: {item.sku} · Qty: {item.quantity}</p>
+                      <p className="text-sm text-gray-800">{item.name}</p>
+                      <p className="text-xs text-gray-400">SKU: {item.sku} · Qty: {item.quantity}</p>
                     </div>
-                    <span className="text-sm font-medium text-zinc-300">{formatCurrency(item.total || item.price * item.quantity)}</span>
+                    <span className="text-sm font-medium text-gray-800">{formatCurrency(item.total || item.price * item.quantity)}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Totals */}
-            <div className="bg-zinc-900/50 rounded-lg p-4 space-y-2">
-              <div className="flex justify-between text-sm"><span className="text-zinc-500">Subtotal</span><span className="text-zinc-300">{formatCurrency(selectedOrder.subtotal)}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-zinc-500">Frete</span><span className="text-zinc-300">{formatCurrency(selectedOrder.shippingCost)}</span></div>
+            <div className="bg-gray-50 border border-gray-100 rounded-lg p-4 space-y-2">
+              <div className="flex justify-between text-sm"><span className="text-gray-500">Subtotal</span><span className="text-gray-700">{formatCurrency(selectedOrder.subtotal)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-gray-500">Frete</span><span className="text-gray-700">{formatCurrency(selectedOrder.shippingCost)}</span></div>
               {parseFloat(selectedOrder.discount) > 0 && (
-                <div className="flex justify-between text-sm"><span className="text-zinc-500">Desconto</span><span className="text-emerald-400">-{formatCurrency(selectedOrder.discount)}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-gray-500">Desconto</span><span className="text-emerald-600">-{formatCurrency(selectedOrder.discount)}</span></div>
               )}
-              <div className="flex justify-between text-sm font-bold border-t border-zinc-800 pt-2 mt-2">
-                <span className="text-white">Total</span><span className="text-white">{formatCurrency(selectedOrder.total)}</span>
+              <div className="flex justify-between text-sm font-bold border-t border-gray-200 pt-2 mt-2">
+                <span className="text-gray-900">Total</span><span className="text-gray-900">{formatCurrency(selectedOrder.total)}</span>
               </div>
             </div>
 
             {/* Tracking */}
             {selectedOrder.trackingCode && (
-              <div className="bg-zinc-900/50 rounded-lg p-4">
-                <h4 className="text-xs font-semibold text-zinc-400 mb-2">Rastreamento</h4>
+              <div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
+                <h4 className="text-xs font-semibold text-gray-500 mb-2">Rastreamento</h4>
                 <div className="flex items-center gap-2">
-                  <Truck className="w-4 h-4 text-zinc-500" />
-                  <span className="text-sm text-zinc-300">{selectedOrder.shippingCarrier}: {selectedOrder.trackingCode}</span>
+                  <Truck className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm text-gray-700">{selectedOrder.shippingCarrier}: {selectedOrder.trackingCode}</span>
                 </div>
               </div>
             )}
 
             {selectedOrder.customerNote && (
-              <div className="bg-zinc-900/50 rounded-lg p-4">
-                <h4 className="text-xs font-semibold text-zinc-400 mb-2">Nota do Cliente</h4>
-                <p className="text-sm text-zinc-400">{selectedOrder.customerNote}</p>
+              <div className="bg-gray-50 border border-gray-100 rounded-lg p-4">
+                <h4 className="text-xs font-semibold text-gray-500 mb-2">Nota do Cliente</h4>
+                <p className="text-sm text-gray-600">{selectedOrder.customerNote}</p>
               </div>
             )}
 
-            <div className="text-[10px] text-zinc-700">
+            <div className="text-[10px] text-gray-400">
               Loja: {selectedOrder.store?.name} ({selectedOrder.store?.platform}) · ID externo: {selectedOrder.externalId}
             </div>
           </div>

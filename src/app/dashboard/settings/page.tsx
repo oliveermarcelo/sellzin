@@ -34,9 +34,9 @@ export default function SettingsPage() {
 
       <div className="space-y-6 max-w-2xl">
         {/* Account */}
-        <div className="bg-[#0f0f12] border border-zinc-800/60 rounded-xl p-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
           <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-            <Settings className="w-4 h-4 text-zinc-500" /> Conta
+            <Settings className="w-4 h-4 text-gray-500" /> Conta
           </h3>
           <div className="space-y-4">
             <Input label="Nome da empresa" value={tenant?.name || ""} readOnly />
@@ -45,15 +45,15 @@ export default function SettingsPage() {
         </div>
 
         {/* Plan */}
-        <div className="bg-[#0f0f12] border border-zinc-800/60 rounded-xl p-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
           <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-zinc-500" /> Plano
+            <CreditCard className="w-4 h-4 text-gray-500" /> Plano
           </h3>
 
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <Badge color={plan.color} size="sm">{plan.name}</Badge>
-              <span className="text-sm text-zinc-400">{plan.price}</span>
+              <span className="text-sm text-gray-600">{plan.price}</span>
             </div>
             {trialDays > 0 && (
               <Badge color="#fbbf24" size="xs">Trial: {trialDays} dias restantes</Badge>
@@ -61,17 +61,17 @@ export default function SettingsPage() {
           </div>
 
           <div className="grid grid-cols-3 gap-3 mb-4">
-            <div className="bg-zinc-900/50 rounded-lg p-3 text-center">
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
               <p className="text-sm font-bold text-white">{plan.contacts}</p>
-              <p className="text-[10px] text-zinc-600">Contatos</p>
+              <p className="text-[10px] text-gray-400">Contatos</p>
             </div>
-            <div className="bg-zinc-900/50 rounded-lg p-3 text-center">
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
               <p className="text-sm font-bold text-white">{plan.stores}</p>
-              <p className="text-[10px] text-zinc-600">Lojas</p>
+              <p className="text-[10px] text-gray-400">Lojas</p>
             </div>
-            <div className="bg-zinc-900/50 rounded-lg p-3 text-center">
+            <div className="bg-gray-50 rounded-lg p-3 text-center">
               <p className="text-sm font-bold text-white">{plan.messages}</p>
-              <p className="text-[10px] text-zinc-600">Msgs WhatsApp/mês</p>
+              <p className="text-[10px] text-gray-400">Msgs WhatsApp/mês</p>
             </div>
           </div>
 
@@ -81,30 +81,30 @@ export default function SettingsPage() {
         </div>
 
         {/* API Key */}
-        <div className="bg-[#0f0f12] border border-zinc-800/60 rounded-xl p-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
           <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-            <Key className="w-4 h-4 text-zinc-500" /> Chave da API
+            <Key className="w-4 h-4 text-gray-500" /> Chave da API
           </h3>
-          <p className="text-xs text-zinc-500 mb-3">
+          <p className="text-xs text-gray-500 mb-3">
             Use sua API key para integrar com o assistente IA e outras ferramentas.
           </p>
           <div className="flex items-center gap-2">
-            <div className="flex-1 px-3 py-2 rounded-lg bg-zinc-900/50 border border-zinc-800 font-mono text-sm text-zinc-400">
+            <div className="flex-1 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 font-mono text-sm text-gray-600">
               {showApiKey ? tenant?.apiKey : "sk_••••••••••••••••••••••••••••••"}
             </div>
-            <button onClick={() => setShowApiKey(!showApiKey)} className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-zinc-300 transition">
+            <button onClick={() => setShowApiKey(!showApiKey)} className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:text-gray-700 transition">
               {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
-            <button onClick={copyApiKey} className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-zinc-300 transition">
+            <button onClick={copyApiKey} className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:text-gray-700 transition">
               {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
             </button>
           </div>
         </div>
 
         {/* Notifications */}
-        <div className="bg-[#0f0f12] border border-zinc-800/60 rounded-xl p-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
           <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-            <Bell className="w-4 h-4 text-zinc-500" /> Notificações
+            <Bell className="w-4 h-4 text-gray-500" /> Notificações
           </h3>
           <div className="space-y-3">
             {[
@@ -115,8 +115,8 @@ export default function SettingsPage() {
             ].map((item, i) => (
               <div key={i} className="flex items-center justify-between py-2">
                 <div>
-                  <p className="text-sm text-zinc-300">{item.label}</p>
-                  <p className="text-xs text-zinc-600">{item.desc}</p>
+                  <p className="text-sm text-gray-700">{item.label}</p>
+                  <p className="text-xs text-gray-400">{item.desc}</p>
                 </div>
                 <button className="relative w-10 h-5 rounded-full bg-indigo-500 transition">
                   <span className="absolute top-0.5 left-[22px] w-4 h-4 rounded-full bg-white shadow" />
