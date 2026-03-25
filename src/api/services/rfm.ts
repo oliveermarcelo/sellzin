@@ -1,6 +1,6 @@
 // @ts-nocheck
-import { db } from "../lib/db";
-import { contacts } from "../lib/db/schema";
+import { db } from "../../lib/db";
+import { contacts } from "../../lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 
 interface RFMScores {
