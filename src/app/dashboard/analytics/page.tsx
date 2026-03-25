@@ -72,7 +72,7 @@ export default function AnalyticsPage() {
       {/* Revenue Chart */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-white">Faturamento</h3>
+          <h3 className="text-sm font-semibold text-gray-900">Faturamento</h3>
           <Tabs tabs={[
             { id: "day", label: "Diário" },
             { id: "week", label: "Semanal" },
@@ -87,12 +87,12 @@ export default function AnalyticsPage() {
                 const height = maxRevenue > 0 ? (d.revenue / maxRevenue) * 100 : 0;
                 return (
                   <div key={i} className="flex-1 min-w-0 group relative">
-                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-100 text-white text-[10px] px-2 py-1.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none z-10 shadow-lg">
+                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] px-2 py-1.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none z-10 shadow-lg">
                       <p className="font-semibold">{formatCurrency(d.revenue)}</p>
-                      <p className="text-gray-600">{d.orders} pedidos</p>
-                      <p className="text-gray-500">{new Date(d.period).toLocaleDateString("pt-BR")}</p>
+                      <p className="text-gray-300">{d.orders} pedidos</p>
+                      <p className="text-gray-400">{new Date(d.period).toLocaleDateString("pt-BR")}</p>
                     </div>
-                    <div className="w-full rounded-sm bg-indigo-500/30 hover:bg-indigo-400/50 transition-all cursor-pointer"
+                    <div className="w-full rounded-sm bg-red-500 hover:bg-red-400 transition-all cursor-pointer"
                       style={{ height: `${Math.max(height, 2)}%` }} />
                   </div>
                 );
@@ -111,7 +111,7 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         {/* RFM Segments */}
         <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-white mb-4">Distribuição RFM</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Distribuição RFM</h3>
           {segments.length > 0 ? (
             <div className="space-y-4">
               {segments.sort((a: any, b: any) => b.count - a.count).map((s: any) => {
@@ -142,7 +142,7 @@ export default function AnalyticsPage() {
 
         {/* Top Products */}
         <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-white mb-4">Top Produtos (30 dias)</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Top Produtos (30 dias)</h3>
           {topProducts.length > 0 ? (
             <div className="space-y-3">
               {topProducts.map((p: any, i: number) => {
@@ -161,7 +161,7 @@ export default function AnalyticsPage() {
                       </div>
                     </div>
                     <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-indigo-500/50 rounded-full" style={{ width: `${pct}%` }} />
+                      <div className="h-full bg-red-400 rounded-full" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 );
@@ -176,7 +176,7 @@ export default function AnalyticsPage() {
       {/* Comparison Table */}
       {current && previous && (
         <div className="bg-white border border-gray-200 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-white mb-4">Comparativo Semanal</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Comparativo Semanal</h3>
           <div className="grid grid-cols-3 gap-4">
             {[
               { label: "Faturamento", current: formatCurrency(current.revenue), previous: formatCurrency(previous.revenue), change: revenueChange },
@@ -186,7 +186,7 @@ export default function AnalyticsPage() {
             ].map((m) => (
               <div key={m.label} className="text-center">
                 <p className="text-xs text-gray-500 mb-2">{m.label}</p>
-                <p className="text-lg font-bold text-white">{m.current}</p>
+                <p className="text-lg font-bold text-gray-900">{m.current}</p>
                 <div className="flex items-center justify-center gap-1 mt-1">
                   {parseFloat(m.change) >= 0 ? (
                     <ArrowUp className="w-3 h-3 text-emerald-400" />
