@@ -8,6 +8,7 @@ import {
   Megaphone, Zap, Settings, LogOut, Store, ChevronLeft, Menu, MessageSquare
 } from "lucide-react";
 import { useState } from "react";
+import { Logo } from "@/components/ui/logo";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -41,11 +42,10 @@ export function Sidebar() {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-gray-800">
-        <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
-          S
-        </div>
-        {!collapsed && (
-          <span className="text-base font-bold tracking-tight text-white">Sellzin</span>
+        {!collapsed ? (
+          <Logo className="h-7 w-auto text-white" />
+        ) : (
+          <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white font-bold text-sm shrink-0">S</div>
         )}
         <button onClick={() => setCollapsed(!collapsed)}
           className="ml-auto text-gray-500 hover:text-gray-300 transition hidden lg:block">
