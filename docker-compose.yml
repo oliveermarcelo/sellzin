@@ -78,7 +78,7 @@ services:
 
   # ── Evolution API (WhatsApp) ──
   evolution:
-    image: atendai/evolution-api:latest
+    image: atendai/evolution-api:v2.2.3
     container_name: sellzin-evolution
     restart: unless-stopped
     ports:
@@ -100,6 +100,8 @@ services:
       - WEBHOOK_GLOBAL_ENABLED=false
       - LOG_LEVEL=ERROR
       - DEL_INSTANCE=false
+      - QRCODE_LIMIT=30
+      - LOG_LEVEL=INFO
     volumes:
       - evolution_data:/evolution/instances
     depends_on:
