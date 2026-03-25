@@ -396,11 +396,13 @@ async function syncMagentoAbandonedCarts(store: any, tenantId: string) {
       const customerEmail = email || quote.customer_email;
       const items = (quote.items || []).map((i: any) => ({
         name: i.name, sku: i.sku, quantity: i.qty, price: i.price,
-        total: String((parseFloat(i.price) || 0) * (parseFloat(i.qty) || 1)),
+        total: String(parseFloat(i.row_total ?? i.base_row_total ?? 0) || (parseFloat(i.price) || 0) * (parseFloat(i.qty) || 1)),
       }));
       if (!items.length) continue;
 
-      const total = String(quote.grand_total || quote.subtotal || 0);
+      // grand_total não vem no search — soma row_total dos itens
+      const calculatedTotal = items.reduce((acc, i) => acc + parseFloat(i.total || "0"), 0);
+      const total = String(quote.grand_total || quote.subtotal || calculatedTotal || 0);
       const abandonedAt = quote.updated_at ? new Date(quote.updated_at) : new Date();
       const checkoutUrl = `${store.apiUrl.replace(/\/rest.*/, "")}/checkout/cart`;
 
