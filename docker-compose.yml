@@ -96,8 +96,7 @@ services:
       - DATABASE_SAVE_MESSAGE_UPDATE=false
       - DATABASE_SAVE_DATA_CONTACTS=false
       - DATABASE_SAVE_DATA_CHATS=false
-      - REDIS_ENABLED=true
-      - REDIS_URI=redis://redis:6379
+      - REDIS_ENABLED=false
       - WEBHOOK_GLOBAL_ENABLED=false
       - LOG_LEVEL=ERROR
       - DEL_INSTANCE=false
