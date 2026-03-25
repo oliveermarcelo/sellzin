@@ -192,8 +192,7 @@ async function processMagentoWebhook(tenantId: string, storeId: string, event: s
       customerFirst: payload.customer_firstname,
       customerLast: payload.customer_lastname,
       customerCity: payload.billing_address?.city,
-      customerState: payload.billing_address?.region,
-      customerAddress: payload.billing_address?.street?.[0],
+      customerState: payload.billing_address?.region_code || payload.billing_address?.region?.substring(0, 2),
       placedAt: payload.created_at,
     });
   }
@@ -213,15 +212,12 @@ async function upsertOrder(tenantId: string, storeId: string, data: any) {
 
     if (existing) {
       contactId = existing.id;
-      // Update address fields if missing
-      if (data.customerCity && !existing.city) {
-        await db.update(contacts).set({
-          city: data.customerCity,
-          state: data.customerState,
-          phone: existing.phone || data.customerPhone || null,
-          updatedAt: new Date(),
-        }).where(eq(contacts.id, existing.id));
-      }
+      // Always update address/phone with fresh data from the order
+      const patch: any = { updatedAt: new Date() };
+      if (data.customerCity) patch.city = data.customerCity;
+      if (data.customerState) patch.state = data.customerState;
+      if (data.customerPhone && !existing.phone) patch.phone = data.customerPhone;
+      await db.update(contacts).set(patch).where(eq(contacts.id, existing.id));
     } else {
       const [newContact] = await db.insert(contacts).values({
         tenantId, storeId,
@@ -347,8 +343,7 @@ async function syncMagento(store: any, tenantId: string) {
         customerFirst: order.customer_firstname,
         customerLast: order.customer_lastname,
         customerCity: order.billing_address?.city,
-        customerState: order.billing_address?.region,
-        customerAddress: order.billing_address?.street?.[0],
+        customerState: order.billing_address?.region_code || order.billing_address?.region?.substring(0, 2),
         placedAt: order.created_at,
       });
     }
