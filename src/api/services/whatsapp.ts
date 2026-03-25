@@ -33,12 +33,19 @@ export class EvolutionService {
     return res.json();
   }
 
-  async getQR(instanceName: string) {
-    const res = await fetch(`${this.url}/instance/connect/${instanceName}`, {
-      headers: this.headers(),
-    });
-    if (!res.ok) throw new Error(`Evolution getQR error: ${res.status}`);
-    return res.json(); // { base64, code }
+  async getQR(instanceName: string, retries = 8, delayMs = 3000) {
+    for (let i = 0; i < retries; i++) {
+      const res = await fetch(`${this.url}/instance/connect/${instanceName}`, {
+        headers: this.headers(),
+      });
+      if (!res.ok) throw new Error(`Evolution getQR error: ${res.status}`);
+      const data = await res.json();
+      // {"count":0} means QR not ready yet
+      const qrBase64 = data?.base64 || data?.qrcode?.base64 || data?.code || null;
+      if (qrBase64) return data;
+      if (i < retries - 1) await new Promise(r => setTimeout(r, delayMs));
+    }
+    return { base64: null };
   }
 
   async getStatus(instanceName: string) {
@@ -78,6 +85,7 @@ export class EvolutionService {
       method: "POST",
       headers: this.headers(),
       body: JSON.stringify({
+        enabled: true,
         url: webhookUrl,
         webhook_by_events: false,
         webhook_base64: true,

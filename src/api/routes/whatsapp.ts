@@ -49,12 +49,11 @@ export async function whatsappRoutes(app: FastifyInstance) {
         console.warn("[whatsapp] createInstance warning:", e.message);
       }
 
-      // Step 2: wait for socket to be ready, then get QR
+      // Step 2: getQR with internal retries (waits up to ~24s for socket to init)
       if (!qrFromCreate) {
-        await new Promise(r => setTimeout(r, 3000)); // wait 3s for instance to init
         try {
           const qrResp = await svc.getQR(finalInstanceName);
-          console.log("[whatsapp] getQR response:", JSON.stringify(qrResp).slice(0, 300));
+          console.log("[whatsapp] getQR response:", JSON.stringify(qrResp).slice(0, 200));
           qrFromCreate = qrResp?.base64 || qrResp?.qrcode?.base64 || qrResp?.code || null;
         } catch (e: any) {
           console.warn("[whatsapp] getQR warning:", e.message);
@@ -63,10 +62,11 @@ export async function whatsappRoutes(app: FastifyInstance) {
 
       if (qrFromCreate) initialStatus = "connecting";
 
-      // Step 3: configure webhook
+      // Step 3: configure webhook (use internal Docker hostname so Evolution can reach us)
       try {
-        const apiUrl = process.env.API_URL || "http://localhost:3001";
-        await svc.setWebhook(finalInstanceName, `${apiUrl}/v1/whatsapp/webhook/evolution/${finalInstanceName}`);
+        const internalUrl = process.env.INTERNAL_API_URL || `http://sellzin-app:3001`;
+        await svc.setWebhook(finalInstanceName, `${internalUrl}/v1/whatsapp/webhook/evolution/${finalInstanceName}`);
+        console.log("[whatsapp] setWebhook OK:", `${internalUrl}/v1/whatsapp/webhook/evolution/${finalInstanceName}`);
       } catch (e: any) {
         console.warn("[whatsapp] setWebhook warning:", e.message);
       }
