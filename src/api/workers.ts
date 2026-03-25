@@ -161,6 +161,9 @@ async function processWooCommerceWebhook(tenantId: string, storeId: string, even
         customerPhone: payload.billing?.phone,
         customerFirst: payload.billing?.first_name,
         customerLast: payload.billing?.last_name,
+        customerCity: payload.billing?.city,
+        customerState: payload.billing?.state,
+        customerAddress: payload.billing?.address_1,
         placedAt: payload.date_created,
       });
       break;
@@ -188,6 +191,9 @@ async function processMagentoWebhook(tenantId: string, storeId: string, event: s
       customerEmail: payload.customer_email,
       customerFirst: payload.customer_firstname,
       customerLast: payload.customer_lastname,
+      customerCity: payload.billing_address?.city,
+      customerState: payload.billing_address?.region,
+      customerAddress: payload.billing_address?.street?.[0],
       placedAt: payload.created_at,
     });
   }
@@ -207,6 +213,15 @@ async function upsertOrder(tenantId: string, storeId: string, data: any) {
 
     if (existing) {
       contactId = existing.id;
+      // Update address fields if missing
+      if (data.customerCity && !existing.city) {
+        await db.update(contacts).set({
+          city: data.customerCity,
+          state: data.customerState,
+          phone: existing.phone || data.customerPhone || null,
+          updatedAt: new Date(),
+        }).where(eq(contacts.id, existing.id));
+      }
     } else {
       const [newContact] = await db.insert(contacts).values({
         tenantId, storeId,
@@ -214,6 +229,8 @@ async function upsertOrder(tenantId: string, storeId: string, data: any) {
         phone: data.customerPhone,
         firstName: data.customerFirst,
         lastName: data.customerLast,
+        city: data.customerCity,
+        state: data.customerState,
       }).returning({ id: contacts.id });
       contactId = newContact.id;
     }
@@ -287,6 +304,9 @@ async function syncWooCommerce(store: any, tenantId: string) {
         customerPhone: order.billing?.phone,
         customerFirst: order.billing?.first_name,
         customerLast: order.billing?.last_name,
+        customerCity: order.billing?.city,
+        customerState: order.billing?.state,
+        customerAddress: order.billing?.address_1,
         placedAt: order.date_created,
       });
     }
@@ -326,6 +346,9 @@ async function syncMagento(store: any, tenantId: string) {
         customerEmail: order.customer_email,
         customerFirst: order.customer_firstname,
         customerLast: order.customer_lastname,
+        customerCity: order.billing_address?.city,
+        customerState: order.billing_address?.region,
+        customerAddress: order.billing_address?.street?.[0],
         placedAt: order.created_at,
       });
     }
