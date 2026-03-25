@@ -49,21 +49,35 @@ export default function WhatsAppSettingsPage() {
 
   useEffect(() => { loadChannels(); }, []);
 
+  const extractQrBase64 = (qr: any): string | null => {
+    if (!qr) return null;
+    const raw = qr.base64 || qr.qrcode?.base64 || qr.code || null;
+    if (!raw) return null;
+    // Strip data URI prefix if present
+    return raw.replace(/^data:image\/[^;]+;base64,/, "");
+  };
+
   const handleAdd = async () => {
     setActionLoading("add");
     try {
-      const { channel } = await api.request("/whatsapp/channels", { method: "POST", body: form });
+      const res = await api.request("/whatsapp/channels", { method: "POST", body: form });
+      const { channel, qr } = res;
       setAddModal(false);
-      setForm({ provider: "evolution", name: "", instanceName: "", evolutionUrl: "", evolutionKey: "", phoneNumberId: "", accessToken: "", verifyToken: "", businessAccountId: "" });
+      setForm({ provider: "evolution", name: "", instanceName: "", evolutionUrl: "http://evolution:8080", evolutionKey: "sellzin-evolution-key", phoneNumberId: "", accessToken: "", verifyToken: "", businessAccountId: "" });
       await loadChannels();
 
-      // Auto-show QR for Evolution channels
+      // Show QR from create response (already returned by backend)
       if (form.provider === "evolution") {
-        try {
-          const data = await api.request(`/whatsapp/channels/${channel.id}/qr`);
-          const qrBase64 = data.qr?.base64 || data.qr?.qrcode?.base64;
+        const qrBase64 = extractQrBase64(qr);
+        if (qrBase64) {
           setQrModal({ channel, qr: qrBase64 });
-        } catch (e) { /* QR failed but channel was created */ }
+        } else {
+          // Fallback: fetch QR separately
+          try {
+            const data = await api.request(`/whatsapp/channels/${channel.id}/qr`);
+            setQrModal({ channel, qr: extractQrBase64(data.qr) });
+          } catch (e) { /* QR not ready yet */ }
+        }
       }
     } catch (e: any) { alert(e.message); }
     finally { setActionLoading(null); }
@@ -83,8 +97,7 @@ export default function WhatsAppSettingsPage() {
     setActionLoading(channel.id + "-qr");
     try {
       const data = await api.request(`/whatsapp/channels/${channel.id}/qr`);
-      const qrBase64 = data.qr?.base64 || data.qr?.qrcode?.base64;
-      setQrModal({ channel, qr: qrBase64 });
+      setQrModal({ channel, qr: extractQrBase64(data.qr) });
       await loadChannels();
     } catch (e: any) { alert(e.message); }
     finally { setActionLoading(null); }
@@ -94,11 +107,9 @@ export default function WhatsAppSettingsPage() {
     setActionLoading(id + "-reconnect");
     try {
       const data = await api.request(`/whatsapp/channels/${id}/reconnect`, { method: "POST" });
-      if (data.qr) {
-        const ch = channels.find(c => c.id === id);
-        const qrBase64 = data.qr?.base64 || data.qr?.qrcode?.base64;
-        setQrModal({ channel: ch, qr: qrBase64 });
-      }
+      const ch = channels.find(c => c.id === id);
+      const qrBase64 = extractQrBase64(data.qr);
+      if (qrBase64) setQrModal({ channel: ch, qr: qrBase64 });
       await loadChannels();
     } catch (e: any) { alert(e.message); }
     finally { setActionLoading(null); }

@@ -30,16 +30,30 @@ export async function whatsappRoutes(app: FastifyInstance) {
     const { name, provider, instanceName, evolutionUrl, evolutionKey, phoneNumberId, accessToken, verifyToken, businessAccountId } = body;
     if (!name || !provider) return reply.code(400).send({ error: "name e provider são obrigatórios" });
 
-    // For Evolution: create the instance if credentials provided
+    // Generate instance name once (used for both Evolution API and DB)
+    const finalInstanceName = instanceName?.trim() || (provider === "evolution" ? `t-${tenantId.slice(0, 8)}-${nanoid(6)}` : null);
+
     let initialStatus = "disconnected";
-    if (provider === "evolution" && evolutionUrl && evolutionKey) {
+    let qrFromCreate: string | null = null;
+
+    if (provider === "evolution" && evolutionUrl && evolutionKey && finalInstanceName) {
+      const svc = new EvolutionService(evolutionUrl, evolutionKey);
       try {
-        const svc = new EvolutionService(evolutionUrl, evolutionKey);
-        const instName = instanceName || `sellzin-${nanoid(6)}`;
-        await svc.createInstance(instName);
+        const created = await svc.createInstance(finalInstanceName);
+        // Evolution returns QR directly in createInstance response when qrcode: true
+        qrFromCreate = created?.qrcode?.base64 || created?.hash?.qrcode?.base64 || null;
+        initialStatus = "connecting";
       } catch (e: any) {
-        // Instance may already exist — not a fatal error
         console.warn("[whatsapp] createInstance warning:", e.message);
+        // Instance may already exist — try to get status
+      }
+
+      // Configure webhook to receive events
+      try {
+        const apiUrl = process.env.API_URL || `http://localhost:3001`;
+        await svc.setWebhook(finalInstanceName, `${apiUrl}/v1/whatsapp/webhook/evolution/${finalInstanceName}`);
+      } catch (e: any) {
+        console.warn("[whatsapp] setWebhook warning:", e.message);
       }
     }
 
@@ -47,7 +61,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
       tenantId,
       name,
       provider,
-      instanceName: instanceName || (provider === "evolution" ? `t-${tenantId.slice(0, 8)}-${nanoid(6)}` : null),
+      instanceName: finalInstanceName,
       evolutionUrl: evolutionUrl || null,
       evolutionKey: evolutionKey || null,
       phoneNumberId: phoneNumberId || null,
@@ -55,9 +69,10 @@ export async function whatsappRoutes(app: FastifyInstance) {
       verifyToken: verifyToken || nanoid(32),
       businessAccountId: businessAccountId || null,
       status: initialStatus,
+      qrCode: qrFromCreate,
     }).returning();
 
-    return { channel };
+    return { channel, qr: qrFromCreate };
   });
 
   // ── Get channel ──
@@ -103,14 +118,20 @@ export async function whatsappRoutes(app: FastifyInstance) {
     if (!channel.evolutionUrl || !channel.evolutionKey) return reply.code(400).send({ error: "Evolution API não configurada" });
 
     const svc = new EvolutionService(channel.evolutionUrl, channel.evolutionKey);
-    const qr = await svc.getQR(channel.instanceName!);
 
-    // Save QR code
+    // If we have a saved QR and instance is still connecting, return it
+    if (channel.qrCode && channel.status === "connecting") {
+      return { qr: { base64: channel.qrCode } };
+    }
+
+    const qr = await svc.getQR(channel.instanceName!);
+    const qrBase64 = qr?.base64 || qr?.qrcode?.base64 || null;
+
     await db.update(whatsappChannels)
-      .set({ qrCode: qr.base64 || qr.qrcode?.base64 || null, status: "connecting", updatedAt: new Date() })
+      .set({ qrCode: qrBase64, status: "connecting", updatedAt: new Date() })
       .where(eq(whatsappChannels.id, id));
 
-    return { qr };
+    return { qr: { base64: qrBase64, ...qr } };
   });
 
   // ── Reconnect ──
@@ -125,14 +146,28 @@ export async function whatsappRoutes(app: FastifyInstance) {
 
     if (channel.provider === "evolution" && channel.evolutionUrl && channel.evolutionKey) {
       const svc = new EvolutionService(channel.evolutionUrl, channel.evolutionKey);
+      let qrBase64: string | null = null;
+
       try {
-        await svc.createInstance(channel.instanceName!);
-      } catch (e) { /* may already exist */ }
-      const qr = await svc.getQR(channel.instanceName!);
+        // Try recreating (if deleted) — returns QR if qrcode: true
+        const created = await svc.createInstance(channel.instanceName!);
+        qrBase64 = created?.qrcode?.base64 || created?.hash?.qrcode?.base64 || null;
+      } catch (e) { /* may already exist — proceed to getQR */ }
+
+      if (!qrBase64) {
+        // Instance already exists, just fetch QR
+        try {
+          const qr = await svc.getQR(channel.instanceName!);
+          qrBase64 = qr?.base64 || qr?.qrcode?.base64 || null;
+        } catch (e: any) {
+          console.warn("[whatsapp] getQR warning:", e.message);
+        }
+      }
+
       await db.update(whatsappChannels)
-        .set({ status: "connecting", qrCode: qr.base64 || null, updatedAt: new Date() })
+        .set({ status: "connecting", qrCode: qrBase64, updatedAt: new Date() })
         .where(eq(whatsappChannels.id, id));
-      return { status: "connecting", qr };
+      return { status: "connecting", qr: { base64: qrBase64 } };
     }
 
     return { status: "ok" };
