@@ -39,37 +39,38 @@ export async function whatsappRoutes(app: FastifyInstance) {
     if (provider === "evolution" && evolutionUrl && evolutionKey && finalInstanceName) {
       const svc = new EvolutionService(evolutionUrl, evolutionKey);
 
-      // Step 1: create instance (ignore if already exists)
+      // Step 1: create instance
       try {
         const created = await svc.createInstance(finalInstanceName);
         console.log("[whatsapp] createInstance response:", JSON.stringify(created).slice(0, 300));
-        // Some versions return QR in createInstance response
-        qrFromCreate = created?.qrcode?.base64 || created?.hash?.qrcode?.base64 || null;
+        qrFromCreate = created?.qrcode?.base64 || null;
       } catch (e: any) {
         console.warn("[whatsapp] createInstance warning:", e.message);
       }
 
-      // Step 2: getQR with internal retries (waits up to ~24s for socket to init)
+      // Step 2: configure webhook FIRST so QRCODE_UPDATED reaches us
+      try {
+        const internalUrl = process.env.INTERNAL_API_URL || `http://sellzin-app:3001`;
+        await svc.setWebhook(finalInstanceName, `${internalUrl}/v1/whatsapp/webhook/evolution/${finalInstanceName}`);
+        console.log("[whatsapp] setWebhook OK");
+      } catch (e: any) {
+        console.warn("[whatsapp] setWebhook warning:", e.message);
+      }
+
+      // Step 3: trigger connect ONCE — QR will arrive via QRCODE_UPDATED webhook
+      // Do NOT poll: calling /instance/connect repeatedly resets the Baileys socket
       if (!qrFromCreate) {
         try {
+          await new Promise(r => setTimeout(r, 3000)); // wait 3s for socket init
           const qrResp = await svc.getQR(finalInstanceName);
-          console.log("[whatsapp] getQR response:", JSON.stringify(qrResp).slice(0, 200));
-          qrFromCreate = qrResp?.base64 || qrResp?.qrcode?.base64 || qrResp?.code || null;
+          qrFromCreate = qrResp?.base64 || null;
+          console.log("[whatsapp] initial getQR:", qrFromCreate ? "got QR" : "QR pending (webhook will deliver)");
         } catch (e: any) {
           console.warn("[whatsapp] getQR warning:", e.message);
         }
       }
 
-      if (qrFromCreate) initialStatus = "connecting";
-
-      // Step 3: configure webhook (use internal Docker hostname so Evolution can reach us)
-      try {
-        const internalUrl = process.env.INTERNAL_API_URL || `http://sellzin-app:3001`;
-        await svc.setWebhook(finalInstanceName, `${internalUrl}/v1/whatsapp/webhook/evolution/${finalInstanceName}`);
-        console.log("[whatsapp] setWebhook OK:", `${internalUrl}/v1/whatsapp/webhook/evolution/${finalInstanceName}`);
-      } catch (e: any) {
-        console.warn("[whatsapp] setWebhook warning:", e.message);
-      }
+      initialStatus = "connecting";
     }
 
     const [channel] = await db.insert(whatsappChannels).values({
@@ -132,21 +133,14 @@ export async function whatsappRoutes(app: FastifyInstance) {
     if (channel.provider !== "evolution") return reply.code(400).send({ error: "QR code disponível apenas para Evolution API" });
     if (!channel.evolutionUrl || !channel.evolutionKey) return reply.code(400).send({ error: "Evolution API não configurada" });
 
-    const svc = new EvolutionService(channel.evolutionUrl, channel.evolutionKey);
-
-    // If we have a saved QR and instance is still connecting, return it
-    if (channel.qrCode && channel.status === "connecting") {
+    // QR is populated by QRCODE_UPDATED webhook — just read from DB
+    // Do NOT call Evolution here: repeated calls to /instance/connect reset the Baileys socket
+    if (channel.qrCode) {
       return { qr: { base64: channel.qrCode } };
     }
 
-    const qr = await svc.getQR(channel.instanceName!);
-    const qrBase64 = qr?.base64 || qr?.qrcode?.base64 || null;
-
-    await db.update(whatsappChannels)
-      .set({ qrCode: qrBase64, status: "connecting", updatedAt: new Date() })
-      .where(eq(whatsappChannels.id, id));
-
-    return { qr: { base64: qrBase64, ...qr } };
+    // No QR yet — frontend should keep polling until webhook delivers it
+    return { qr: { base64: null } };
   });
 
   // ── Reconnect ──

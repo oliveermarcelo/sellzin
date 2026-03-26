@@ -33,32 +33,22 @@ export class EvolutionService {
     return res.json();
   }
 
-  async getQR(instanceName: string, retries = 15, delayMs = 2000) {
-    // Trigger connection (returns {count:0} immediately — QR not ready yet)
-    await this.triggerConnect(instanceName);
-
-    // Poll /instance/connect/ — returns {count:N, base64:...} when QR is ready
-    for (let i = 0; i < retries; i++) {
-      await new Promise(r => setTimeout(r, delayMs));
-      try {
-        const res = await fetch(`${this.url}/instance/connect/${instanceName}`, {
-          headers: this.headers(),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          // count > 0 means QR was generated
-          const qrBase64 = data?.base64 || data?.qrcode?.base64 || null;
-          if (qrBase64 || (data?.count && data.count > 0)) {
-            console.log(`[evolution] QR ready after ${i + 1} retries`);
-            return { base64: qrBase64 || data?.base64 };
-          }
-          console.log(`[evolution] QR not ready yet (count=${data?.count}, attempt ${i + 1}/${retries})`);
-        }
-      } catch (e: any) {
-        console.warn(`[evolution] poll error: ${e.message}`);
-      }
+  async getQR(instanceName: string) {
+    // Call connect ONCE — calling multiple times restarts the Baileys socket
+    // The QR will arrive via QRCODE_UPDATED webhook; here we just check current state
+    try {
+      const res = await fetch(`${this.url}/instance/connect/${instanceName}`, {
+        headers: this.headers(),
+      });
+      if (!res.ok) return { base64: null };
+      const data = await res.json();
+      console.log(`[evolution] connect response:`, JSON.stringify(data).slice(0, 300));
+      const qrBase64 = data?.base64 || data?.qrcode?.base64 || data?.code || null;
+      return { base64: qrBase64 };
+    } catch (e: any) {
+      console.warn(`[evolution] getQR error: ${e.message}`);
+      return { base64: null };
     }
-    return { base64: null };
   }
 
   async getStatus(instanceName: string) {
@@ -98,11 +88,13 @@ export class EvolutionService {
       method: "POST",
       headers: this.headers(),
       body: JSON.stringify({
-        enabled: true,
-        url: webhookUrl,
-        webhook_by_events: false,
-        webhook_base64: true,
-        events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
+        webhook: {
+          enabled: true,
+          url: webhookUrl,
+          webhookByEvents: false,
+          webhookBase64: true,
+          events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"],
+        },
       }),
     });
     if (!res.ok) {
