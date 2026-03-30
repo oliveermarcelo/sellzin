@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { formatCurrency, formatNumber, getSegmentLabel, getSegmentColor } from "@/lib/utils";
-import { PageHeader, Loading, Tabs, StatCard } from "@/components/ui";
+import { PageHeader, Loading, Tabs, StatCard, DateRangePicker } from "@/components/ui";
 import { BarChart3, TrendingUp, DollarSign, Users, ShoppingCart, ArrowUp, ArrowDown } from "lucide-react";
 
 export default function AnalyticsPage() {
@@ -13,15 +13,19 @@ export default function AnalyticsPage() {
   const [topProducts, setTopProducts] = useState<any[]>([]);
   const [comparison, setComparison] = useState<any[]>([]);
   const [revenueGroup, setRevenueGroup] = useState("day");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { loadAll(); }, []);
-  useEffect(() => { loadRevenue(); }, [revenueGroup]);
+  const dateParams = startDate && endDate ? { startDate, endDate } : undefined;
+
+  useEffect(() => { loadAll(); }, [startDate, endDate]);
+  useEffect(() => { loadRevenue(); }, [revenueGroup, startDate, endDate]);
 
   async function loadAll() {
     try {
       const [ov, seg, prod, comp] = await Promise.all([
-        api.getOverview(), api.getRfm(), api.getTopProducts(10), api.getComparison(),
+        api.getOverview(dateParams), api.getRfm(), api.getTopProducts(10, dateParams), api.getComparison(),
       ]);
       setOverview(ov);
       setSegments(seg.segments || []);
@@ -33,7 +37,7 @@ export default function AnalyticsPage() {
 
   async function loadRevenue() {
     try {
-      const data = await api.getRevenue(revenueGroup);
+      const data = await api.getRevenue(revenueGroup, dateParams);
       setRevenueData(data.data || []);
     } catch (e) { console.error(e); }
   }
@@ -52,7 +56,15 @@ export default function AnalyticsPage() {
 
   return (
     <div>
-      <PageHeader title="Analytics" description="Métricas detalhadas do seu e-commerce" />
+      <PageHeader title="Analytics" description="Métricas detalhadas do seu e-commerce"
+        actions={
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onChange={(s, e) => { setStartDate(s); setEndDate(e); }}
+          />
+        }
+      />
 
       {/* Comparison Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">

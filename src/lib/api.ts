@@ -124,10 +124,19 @@ class ApiClient {
   getLatestCampaign() { return this.request("/campaigns/latest/stats"); }
 
   // Analytics
-  getOverview() { return this.request("/analytics/overview"); }
+  getOverview(params?: Record<string, string>) {
+    const qs = params ? "?" + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => !!v))).toString() : "";
+    return this.request(`/analytics/overview${qs}`);
+  }
   getRfm() { return this.request("/analytics/rfm"); }
-  getTopProducts(limit = 10) { return this.request(`/analytics/products/top?limit=${limit}`); }
-  getRevenue(group = "day") { return this.request(`/analytics/revenue?group=${group}`); }
+  getTopProducts(limit = 10, params?: Record<string, string>) {
+    const extra = params ? "&" + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => !!v))).toString() : "";
+    return this.request(`/analytics/products/top?limit=${limit}${extra}`);
+  }
+  getRevenue(group = "day", params?: Record<string, string>) {
+    const extra = params ? "&" + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => !!v))).toString() : "";
+    return this.request(`/analytics/revenue?group=${group}${extra}`);
+  }
   getComparison() { return this.request("/analytics/compare"); }
 
   // WhatsApp

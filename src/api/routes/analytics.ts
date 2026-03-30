@@ -10,13 +10,18 @@ export async function analyticsRoutes(app: FastifyInstance) {
   // ── Overview dashboard ──
   app.get("/overview", async (request) => {
     const { tenantId } = request.user as any;
+    const query = request.query as any;
+
+    const dateFilter = query.startDate && query.endDate
+      ? sql`placed_at >= ${query.startDate}::date AND placed_at < (${query.endDate}::date + INTERVAL '1 day')`
+      : sql`placed_at > NOW() - INTERVAL '30 days'`;
 
     const [orderStats] = await db
       .select({
-        totalRevenue: sql<number>`COALESCE(SUM(${orders.total}::numeric) FILTER (WHERE ${orders.placedAt} > NOW() - INTERVAL '30 days'), 0)`,
+        totalRevenue: sql<number>`COALESCE(SUM(${orders.total}::numeric) FILTER (WHERE ${dateFilter}), 0)`,
         prevRevenue: sql<number>`COALESCE(SUM(${orders.total}::numeric) FILTER (WHERE ${orders.placedAt} BETWEEN NOW() - INTERVAL '60 days' AND NOW() - INTERVAL '30 days'), 0)`,
-        totalOrders: sql<number>`COUNT(*) FILTER (WHERE ${orders.placedAt} > NOW() - INTERVAL '30 days')`,
-        avgOrderValue: sql<number>`COALESCE(AVG(${orders.total}::numeric) FILTER (WHERE ${orders.placedAt} > NOW() - INTERVAL '30 days'), 0)`,
+        totalOrders: sql<number>`COUNT(*) FILTER (WHERE ${dateFilter})`,
+        avgOrderValue: sql<number>`COALESCE(AVG(${orders.total}::numeric) FILTER (WHERE ${dateFilter}), 0)`,
       })
       .from(orders)
       .where(eq(orders.tenantId, tenantId));
@@ -79,7 +84,10 @@ export async function analyticsRoutes(app: FastifyInstance) {
     const query = request.query as any;
     const limit = parseInt(query.limit || "10");
 
-    // Items are stored as JSONB array in orders
+    const dateCondition = query.startDate && query.endDate
+      ? sql`placed_at >= ${query.startDate}::date AND placed_at < (${query.endDate}::date + INTERVAL '1 day')`
+      : sql`placed_at > NOW() - INTERVAL '30 days'`;
+
     const result = await db.execute(sql`
       SELECT
         item->>'name' as name,
@@ -89,7 +97,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
         SUM((item->>'total')::numeric) as total_revenue
       FROM orders, jsonb_array_elements(items) as item
       WHERE tenant_id = ${tenantId}
-        AND placed_at > NOW() - INTERVAL '30 days'
+        AND ${dateCondition}
       GROUP BY item->>'name', item->>'sku'
       ORDER BY total_revenue DESC
       LIMIT ${limit}
@@ -106,6 +114,10 @@ export async function analyticsRoutes(app: FastifyInstance) {
 
     const interval = groupBy === "month" ? "month" : groupBy === "week" ? "week" : "day";
 
+    const dateCondition = query.startDate && query.endDate
+      ? sql`placed_at >= ${query.startDate}::date AND placed_at < (${query.endDate}::date + INTERVAL '1 day')`
+      : sql`placed_at > NOW() - INTERVAL '90 days'`;
+
     const result = await db.execute(sql`
       SELECT
         DATE_TRUNC(${sql.raw(`'${interval}'`)}, placed_at) as period,
@@ -114,7 +126,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
         COALESCE(AVG(total::numeric), 0) as avg_order_value
       FROM orders
       WHERE tenant_id = ${tenantId}
-        AND placed_at > NOW() - INTERVAL '90 days'
+        AND ${dateCondition}
       GROUP BY DATE_TRUNC(${sql.raw(`'${interval}'`)}, placed_at)
       ORDER BY period ASC
     `);
