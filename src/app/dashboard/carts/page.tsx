@@ -86,7 +86,7 @@ export default function CartsPage() {
       {/* Conversion chart */}
       {conversion.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
-          <h3 className="text-sm font-semibold text-white mb-4">Evolução de Recuperação</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Evolução de Recuperação</h3>
           <div className="h-32 flex items-end gap-4">
             {conversion.map((c: any, i: number) => {
               const rate = c.total > 0 ? (c.recovered / c.total) * 100 : 0;

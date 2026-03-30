@@ -92,6 +92,26 @@ export async function campaignRoutes(app: FastifyInstance) {
     return reply.code(201).send({ campaign, message: "Campanha iniciada" });
   });
 
+  // ── Send campaign (draft → running) ──
+  app.post("/:id/send", async (request, reply) => {
+    const { tenantId } = request.user as any;
+    const { id } = request.params as any;
+
+    const campaign = await db.query.campaigns.findFirst({
+      where: and(eq(campaigns.id, id), eq(campaigns.tenantId, tenantId)),
+    });
+    if (!campaign) return reply.code(404).send({ error: "Campanha não encontrada" });
+    if (campaign.status !== "draft") return reply.code(400).send({ error: "Apenas campanhas em rascunho podem ser enviadas" });
+
+    const [updated] = await db.update(campaigns)
+      .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(campaigns.id, id), eq(campaigns.tenantId, tenantId)))
+      .returning();
+
+    // TODO: enqueue actual message sending via BullMQ
+    return { campaign: updated };
+  });
+
   app.get("/latest/stats", async (request) => {
     const { tenantId } = request.user as any;
 

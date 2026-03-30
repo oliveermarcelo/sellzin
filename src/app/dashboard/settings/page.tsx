@@ -9,6 +9,10 @@ export default function SettingsPage() {
   const { tenant } = useAuth();
   const [showApiKey, setShowApiKey] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [notifications, setNotifications] = useState([true, true, false, true]);
+
+  const toggleNotif = (i: number) =>
+    setNotifications(prev => prev.map((v, idx) => idx === i ? !v : v));
 
   const copyApiKey = () => {
     if (tenant?.apiKey) {
@@ -35,7 +39,7 @@ export default function SettingsPage() {
       <div className="space-y-6 max-w-2xl">
         {/* Account */}
         <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Settings className="w-4 h-4 text-gray-500" /> Conta
           </h3>
           <div className="space-y-4">
@@ -46,7 +50,7 @@ export default function SettingsPage() {
 
         {/* Plan */}
         <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <CreditCard className="w-4 h-4 text-gray-500" /> Plano
           </h3>
 
@@ -62,15 +66,15 @@ export default function SettingsPage() {
 
           <div className="grid grid-cols-3 gap-3 mb-4">
             <div className="bg-gray-50 rounded-lg p-3 text-center">
-              <p className="text-sm font-bold text-white">{plan.contacts}</p>
+              <p className="text-sm font-bold text-gray-800">{plan.contacts}</p>
               <p className="text-[10px] text-gray-400">Contatos</p>
             </div>
             <div className="bg-gray-50 rounded-lg p-3 text-center">
-              <p className="text-sm font-bold text-white">{plan.stores}</p>
+              <p className="text-sm font-bold text-gray-800">{plan.stores}</p>
               <p className="text-[10px] text-gray-400">Lojas</p>
             </div>
             <div className="bg-gray-50 rounded-lg p-3 text-center">
-              <p className="text-sm font-bold text-white">{plan.messages}</p>
+              <p className="text-sm font-bold text-gray-800">{plan.messages}</p>
               <p className="text-[10px] text-gray-400">Msgs WhatsApp/mês</p>
             </div>
           </div>
@@ -82,7 +86,7 @@ export default function SettingsPage() {
 
         {/* API Key */}
         <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Key className="w-4 h-4 text-gray-500" /> Chave da API
           </h3>
           <p className="text-xs text-gray-500 mb-3">
@@ -103,7 +107,7 @@ export default function SettingsPage() {
 
         {/* Notifications */}
         <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <Bell className="w-4 h-4 text-gray-500" /> Notificações
           </h3>
           <div className="space-y-3">
@@ -118,8 +122,9 @@ export default function SettingsPage() {
                   <p className="text-sm text-gray-700">{item.label}</p>
                   <p className="text-xs text-gray-400">{item.desc}</p>
                 </div>
-                <button className="relative w-10 h-5 rounded-full bg-indigo-500 transition">
-                  <span className="absolute top-0.5 left-[22px] w-4 h-4 rounded-full bg-white shadow" />
+                <button onClick={() => toggleNotif(i)}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${notifications[i] ? "bg-red-500" : "bg-gray-300"}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${notifications[i] ? "left-[22px]" : "left-0.5"}`} />
                 </button>
               </div>
             ))}

@@ -14,6 +14,7 @@ export default function CampaignsPage() {
   const [statsModal, setStatsModal] = useState<any>(null);
   const [form, setForm] = useState({ name: "", channel: "whatsapp", template: "" });
   const [saving, setSaving] = useState(false);
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
   useEffect(() => { loadCampaigns(); }, [tab]);
 
@@ -45,6 +46,16 @@ export default function CampaignsPage() {
       const data = await api.getCampaignStats(id);
       setStatsModal(data);
     } catch (e) { console.error(e); }
+  }
+
+  async function sendCampaign(id: string) {
+    if (!confirm("Enviar esta campanha agora?")) return;
+    setSendingId(id);
+    try {
+      await api.request(`/campaigns/${id}/send`, { method: "POST", body: {} });
+      await loadCampaigns();
+    } catch (e: any) { alert(e.message); }
+    finally { setSendingId(null); }
   }
 
   const channelIcons: Record<string, any> = {
@@ -123,7 +134,11 @@ export default function CampaignsPage() {
                       <BarChart3 className="w-3 h-3" /> Stats
                     </Button>
                     {c.status === "draft" && (
-                      <Button size="sm" className="flex-1"><Send className="w-3 h-3" /> Enviar</Button>
+                      <Button size="sm" className="flex-1"
+                        loading={sendingId === c.id}
+                        onClick={() => sendCampaign(c.id)}>
+                        <Send className="w-3 h-3" /> Enviar
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -173,27 +188,27 @@ export default function CampaignsPage() {
       <Modal open={!!statsModal} onClose={() => setStatsModal(null)} title="Estatísticas da Campanha" size="md">
         {statsModal && (
           <div className="space-y-4">
-            <h3 className="text-base font-semibold text-white">{statsModal.campaign.name}</h3>
+            <h3 className="text-base font-semibold text-gray-900">{statsModal.campaign.name}</h3>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <Users className="w-4 h-4 text-gray-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-white">{formatNumber(statsModal.campaign.totalRecipients)}</p>
+                <p className="text-lg font-bold text-gray-900">{formatNumber(statsModal.campaign.totalRecipients)}</p>
                 <p className="text-[10px] text-gray-400">Destinatários</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <Send className="w-4 h-4 text-gray-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-white">{formatNumber(statsModal.campaign.totalSent)}</p>
+                <p className="text-lg font-bold text-gray-900">{formatNumber(statsModal.campaign.totalSent)}</p>
                 <p className="text-[10px] text-gray-400">Enviadas</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <Eye className="w-4 h-4 text-gray-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-white">{statsModal.rates.readRate}%</p>
+                <p className="text-lg font-bold text-gray-900">{statsModal.rates.readRate}%</p>
                 <p className="text-[10px] text-gray-400">Taxa de Leitura</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3 text-center">
                 <MousePointer className="w-4 h-4 text-gray-500 mx-auto mb-1" />
-                <p className="text-lg font-bold text-white">{statsModal.rates.conversionRate}%</p>
+                <p className="text-lg font-bold text-gray-900">{statsModal.rates.conversionRate}%</p>
                 <p className="text-[10px] text-gray-400">Conversão</p>
               </div>
             </div>
