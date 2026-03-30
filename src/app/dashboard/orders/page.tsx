@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { formatCurrency, formatNumber, formatDate, formatRelativeTime, getStatusLabel, getStatusColor, getInitials } from "@/lib/utils";
-import { PageHeader, Button, SearchInput, Table, Badge, Pagination, Loading, Modal, StatCard, Select, Tabs } from "@/components/ui";
+import { PageHeader, Button, SearchInput, Table, Badge, Pagination, Loading, Modal, StatCard, Select, Tabs, DateRangePicker } from "@/components/ui";
 import { Package, DollarSign, Clock, Truck, Eye } from "lucide-react";
 
 export default function OrdersPage() {
@@ -12,29 +12,40 @@ export default function OrdersPage() {
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [statusFilter, setStatusFilter] = useState("");
   const [periodFilter, setPeriodFilter] = useState("month");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   const loadOrders = useCallback(async (page = 1) => {
     setLoading(true);
     try {
-      const params: Record<string, string> = { page: String(page), limit: "25", period: periodFilter };
+      const params: Record<string, string> = { page: String(page), limit: "25" };
+      if (startDate && endDate) {
+        params.startDate = startDate;
+        params.endDate = endDate;
+      } else {
+        params.period = periodFilter;
+      }
       if (statusFilter) params.status = statusFilter;
       const data = await api.getOrders(params);
       setOrders(data.orders || []);
       if (data.pagination) setPagination(data.pagination);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [statusFilter, periodFilter]);
+  }, [statusFilter, periodFilter, startDate, endDate]);
 
   const loadStats = async () => {
     try {
-      const data = await api.getOrderStats(periodFilter);
+      const params: Record<string, string> = {};
+      if (startDate && endDate) { params.startDate = startDate; params.endDate = endDate; }
+      else params.period = periodFilter;
+      const data = await api.getOrderStats(params);
       setStats(data.stats);
     } catch (e) { console.error(e); }
   };
 
-  useEffect(() => { loadOrders(); loadStats(); }, [loadOrders, periodFilter]);
+  useEffect(() => { loadOrders(); loadStats(); }, [loadOrders, periodFilter, startDate, endDate]);
 
   const openDetail = async (id: string) => {
     try {
@@ -68,12 +79,17 @@ export default function OrdersPage() {
       )}
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row gap-3 mb-4 flex-wrap">
         <Tabs tabs={[
           { id: "today", label: "Hoje" },
           { id: "week", label: "7 dias" },
           { id: "month", label: "30 dias" },
-        ]} active={periodFilter} onChange={setPeriodFilter} />
+        ]} active={startDate ? "" : periodFilter} onChange={(v) => { setPeriodFilter(v); setStartDate(""); setEndDate(""); }} />
+        <DateRangePicker
+          startDate={startDate}
+          endDate={endDate}
+          onChange={(s, e) => { setStartDate(s); setEndDate(e); }}
+        />
         <div className="ml-auto">
           <Select options={statusOptions} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-44" />
         </div>

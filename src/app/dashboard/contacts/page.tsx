@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { formatCurrency, formatNumber, formatDate, formatRelativeTime, getInitials, getSegmentLabel, getSegmentColor } from "@/lib/utils";
-import { PageHeader, Button, SearchInput, Table, Badge, Pagination, Loading, Modal, Tabs, StatCard, Select, EmptyState } from "@/components/ui";
+import { PageHeader, Button, SearchInput, Table, Badge, Pagination, Loading, Modal, Tabs, StatCard, Select, EmptyState, DateRangePicker } from "@/components/ui";
 import { Users, UserPlus, Tag, Download, Mail, Phone, MapPin, Calendar, ShoppingBag, ArrowUpRight } from "lucide-react";
 
 export default function ContactsPage() {
@@ -13,6 +13,8 @@ export default function ContactsPage() {
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [search, setSearch] = useState("");
   const [segmentFilter, setSegmentFilter] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [selectedContact, setSelectedContact] = useState<any>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [tab, setTab] = useState("all");
@@ -25,12 +27,14 @@ export default function ContactsPage() {
     try {
       const params: Record<string, string> = { page: String(page), limit: "25" };
       if (segmentFilter) params.segment = segmentFilter;
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
       const data = search ? await api.searchContacts(search) : await api.getContacts(params);
       setContacts(data.contacts || []);
       if (data.pagination) setPagination(data.pagination);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [search, segmentFilter]);
+  }, [search, segmentFilter, startDate, endDate]);
 
   const loadStats = async () => {
     try {
@@ -94,8 +98,13 @@ export default function ContactsPage() {
       )}
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row gap-3 mb-4 flex-wrap">
         <div className="flex-1"><SearchInput value={search} onChange={setSearch} placeholder="Buscar por nome, email, telefone..." /></div>
+        <DateRangePicker
+          startDate={startDate}
+          endDate={endDate}
+          onChange={(s, e) => { setStartDate(s); setEndDate(e); }}
+        />
         <Select options={segmentOptions} value={segmentFilter}
           onChange={(e) => { setSegmentFilter(e.target.value); }} className="w-48" />
       </div>

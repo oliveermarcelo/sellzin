@@ -97,8 +97,9 @@ class ApiClient {
     return this.request(`/orders${qs}`);
   }
   getOrder(id: string) { return this.request(`/orders/${id}`); }
-  getOrderStats(period?: string) {
-    return this.request(`/orders/stats${period ? `?period=${period}` : ""}`);
+  getOrderStats(params?: Record<string, string>) {
+    const qs = params ? "?" + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => !!v))).toString() : "";
+    return this.request(`/orders/stats${qs}`);
   }
 
   // Carts

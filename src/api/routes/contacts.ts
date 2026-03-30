@@ -29,6 +29,13 @@ export async function contactRoutes(app: FastifyInstance) {
         or(lt(contacts.lastOrderAt, cutoff), sql`${contacts.lastOrderAt} IS NULL`)!
       );
     }
+    if (query.startDate && query.endDate) {
+      conditions.push(sql`${contacts.lastOrderAt} >= ${query.startDate}::date AND ${contacts.lastOrderAt} < (${query.endDate}::date + INTERVAL '1 day')`);
+    } else if (query.startDate) {
+      conditions.push(sql`${contacts.lastOrderAt} >= ${query.startDate}::date`);
+    } else if (query.endDate) {
+      conditions.push(sql`${contacts.lastOrderAt} < (${query.endDate}::date + INTERVAL '1 day')`);
+    }
 
     const where = and(...conditions);
 

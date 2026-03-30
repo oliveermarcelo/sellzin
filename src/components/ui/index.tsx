@@ -2,7 +2,7 @@
 // @ts-nocheck
 import { ReactNode, InputHTMLAttributes, SelectHTMLAttributes, useState } from "react";
 import { cn } from "@/lib/utils";
-import { X, Search, ChevronDown, Loader2 } from "lucide-react";
+import { X, Search, ChevronDown, Loader2, Calendar } from "lucide-react";
 
 // ── Stat Card ──
 export function StatCard({ label, value, sub, icon, trend, color = "zinc" }: {
@@ -268,6 +268,37 @@ export function Loading() {
   return (
     <div className="flex items-center justify-center py-20">
       <Loader2 className="w-6 h-6 text-red-600 animate-spin" />
+    </div>
+  );
+}
+
+// ── DateRangePicker ──
+export function DateRangePicker({ startDate, endDate, onChange, className }: {
+  startDate: string; endDate: string;
+  onChange: (start: string, end: string) => void;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex items-center gap-1.5 bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-sm", className)}>
+      <Calendar className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+      <input
+        type="date"
+        value={startDate}
+        onChange={(e) => onChange(e.target.value, endDate)}
+        className="text-sm text-gray-700 bg-transparent border-none outline-none focus:ring-0 w-32"
+      />
+      <span className="text-gray-400 text-xs">→</span>
+      <input
+        type="date"
+        value={endDate}
+        onChange={(e) => onChange(startDate, e.target.value)}
+        className="text-sm text-gray-700 bg-transparent border-none outline-none focus:ring-0 w-32"
+      />
+      {(startDate || endDate) && (
+        <button onClick={() => onChange("", "")} className="text-gray-400 hover:text-gray-600 ml-1">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      )}
     </div>
   );
 }

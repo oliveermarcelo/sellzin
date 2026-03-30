@@ -20,7 +20,9 @@ export async function orderRoutes(app: FastifyInstance) {
 
     if (query.status) conditions.push(eq(orders.status, query.status));
     if (query.storeId) conditions.push(eq(orders.storeId, query.storeId));
-    if (query.period === "today") {
+    if (query.startDate && query.endDate) {
+      conditions.push(sql`${orders.placedAt} >= ${query.startDate}::date AND ${orders.placedAt} < (${query.endDate}::date + INTERVAL '1 day')`);
+    } else if (query.period === "today") {
       conditions.push(sql`(${orders.placedAt} AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date`);
     } else if (query.period === "week") {
       conditions.push(sql`${orders.placedAt} > NOW() - INTERVAL '7 days'`);
@@ -53,8 +55,13 @@ export async function orderRoutes(app: FastifyInstance) {
     const query = request.query as any;
 
     let dateFilter = sql`${orders.placedAt} > NOW() - INTERVAL '30 days'`;
-    if (query.period === "today") dateFilter = sql`(${orders.placedAt} AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date`;
-    else if (query.period === "week") dateFilter = sql`${orders.placedAt} > NOW() - INTERVAL '7 days'`;
+    if (query.startDate && query.endDate) {
+      dateFilter = sql`${orders.placedAt} >= ${query.startDate}::date AND ${orders.placedAt} < (${query.endDate}::date + INTERVAL '1 day')`;
+    } else if (query.period === "today") {
+      dateFilter = sql`(${orders.placedAt} AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date`;
+    } else if (query.period === "week") {
+      dateFilter = sql`${orders.placedAt} > NOW() - INTERVAL '7 days'`;
+    }
 
     const stats = await db
       .select({
