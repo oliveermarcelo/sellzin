@@ -67,19 +67,26 @@ export default function AnalyticsPage() {
       />
 
       {/* Comparison Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Faturamento (7d)" value={formatCurrency(current?.revenue || 0)}
-          icon={<DollarSign className="w-4 h-4" />}
-          trend={{ value: `${revenueChange}%`, positive: parseFloat(revenueChange) >= 0 }}
-          sub="vs semana anterior" />
-        <StatCard label="Pedidos (7d)" value={formatNumber(current?.orders || 0)}
-          icon={<ShoppingCart className="w-4 h-4" />}
-          trend={{ value: `${ordersChange}%`, positive: parseFloat(ordersChange) >= 0 }}
-          sub="vs semana anterior" />
-        <StatCard label="Ticket Médio" value={formatCurrency(current?.avg_value || 0)} />
-        <StatCard label="Recompra" value={`${overview?.contacts.repurchaseRate || 0}%`}
-          icon={<Users className="w-4 h-4" />} />
-      </div>
+      {(() => {
+        const periodLabel = startDate && endDate
+          ? `${new Date(startDate + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} – ${new Date(endDate + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`
+          : "7d";
+        return (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <StatCard label={`Faturamento (${periodLabel})`} value={formatCurrency(startDate && endDate ? overview?.revenue?.current || 0 : current?.revenue || 0)}
+              icon={<DollarSign className="w-4 h-4" />}
+              trend={!startDate ? { value: `${revenueChange}%`, positive: parseFloat(revenueChange) >= 0 } : undefined}
+              sub={!startDate ? "vs semana anterior" : undefined} />
+            <StatCard label={`Pedidos (${periodLabel})`} value={formatNumber(startDate && endDate ? overview?.orders?.total || 0 : current?.orders || 0)}
+              icon={<ShoppingCart className="w-4 h-4" />}
+              trend={!startDate ? { value: `${ordersChange}%`, positive: parseFloat(ordersChange) >= 0 } : undefined}
+              sub={!startDate ? "vs semana anterior" : undefined} />
+            <StatCard label="Ticket Médio" value={formatCurrency(startDate && endDate ? overview?.orders?.avgValue || 0 : current?.avg_value || 0)} />
+            <StatCard label="Recompra" value={`${overview?.contacts?.repurchaseRate || 0}%`}
+              icon={<Users className="w-4 h-4" />} />
+          </div>
+        );
+      })()}
 
       {/* Revenue Chart */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">

@@ -2,7 +2,7 @@
 import { FastifyInstance } from "fastify";
 import { db } from "../../lib/db";
 import { orders, contacts, abandonedCarts } from "../../lib/db/schema";
-import { eq, sql, count } from "drizzle-orm";
+import { eq, and, sql, count } from "drizzle-orm";
 
 export async function analyticsRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
@@ -12,19 +12,19 @@ export async function analyticsRoutes(app: FastifyInstance) {
     const { tenantId } = request.user as any;
     const query = request.query as any;
 
-    const dateFilter = query.startDate && query.endDate
-      ? sql`placed_at >= ${query.startDate}::date AND placed_at < (${query.endDate}::date + INTERVAL '1 day')`
-      : sql`placed_at > NOW() - INTERVAL '30 days'`;
+    const dateCondition = query.startDate && query.endDate
+      ? sql`${orders.placedAt} >= ${query.startDate}::date AND ${orders.placedAt} < (${query.endDate}::date + INTERVAL '1 day')`
+      : sql`${orders.placedAt} > NOW() - INTERVAL '30 days'`;
 
     const [orderStats] = await db
       .select({
-        totalRevenue: sql<number>`COALESCE(SUM(${orders.total}::numeric) FILTER (WHERE ${dateFilter}), 0)`,
+        totalRevenue: sql<number>`COALESCE(SUM(${orders.total}::numeric), 0)`,
         prevRevenue: sql<number>`COALESCE(SUM(${orders.total}::numeric) FILTER (WHERE ${orders.placedAt} BETWEEN NOW() - INTERVAL '60 days' AND NOW() - INTERVAL '30 days'), 0)`,
-        totalOrders: sql<number>`COUNT(*) FILTER (WHERE ${dateFilter})`,
-        avgOrderValue: sql<number>`COALESCE(AVG(${orders.total}::numeric) FILTER (WHERE ${dateFilter}), 0)`,
+        totalOrders: count(),
+        avgOrderValue: sql<number>`COALESCE(AVG(${orders.total}::numeric), 0)`,
       })
       .from(orders)
-      .where(eq(orders.tenantId, tenantId));
+      .where(and(eq(orders.tenantId, tenantId), dateCondition));
 
     const [contactStats] = await db
       .select({
