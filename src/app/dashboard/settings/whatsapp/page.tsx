@@ -133,11 +133,13 @@ export default function WhatsAppSettingsPage() {
   const handleReconnect = async (id: string) => {
     setActionLoading(id + "-reconnect");
     try {
-      const data = await api.request(`/whatsapp/channels/${id}/reconnect`, { method: "POST" });
-      const ch = channels.find(c => c.id === id);
-      const qrBase64 = extractQrBase64(data.qr);
-      if (qrBase64) setQrModal({ channel: ch, qr: qrBase64 });
+      const data = await api.request(`/whatsapp/channels/${id}/reconnect`, { method: "POST", body: {} });
       await loadChannels();
+      if (data.status !== "connected") {
+        const ch = channels.find(c => c.id === id);
+        const qrBase64 = extractQrBase64(data.qr);
+        setQrModal({ channel: ch, qr: qrBase64 || null });
+      }
     } catch (e: any) { alert(e.message); }
     finally { setActionLoading(null); }
   };

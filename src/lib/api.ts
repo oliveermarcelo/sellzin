@@ -40,13 +40,13 @@ class ApiClient {
     const config: RequestInit = {
       method,
       headers: {
-        "Content-Type": "application/json",
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...headers,
       },
     };
 
-    if (body) config.body = JSON.stringify(body);
+    if (body !== undefined) config.body = JSON.stringify(body);
 
     const res = await fetch(`${getApiBase()}${endpoint}`, config);
 

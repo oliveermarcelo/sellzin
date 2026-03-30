@@ -11,14 +11,31 @@ export async function whatsappRoutes(app: FastifyInstance) {
   // ── List channels ──
   app.get("/channels", { preHandler: [app.authenticate] }, async (req, reply) => {
     const tenantId = req.user.tenantId;
-    const channels = await db.query.whatsappChannels.findMany({
+    const rows = await db.query.whatsappChannels.findMany({
       where: eq(whatsappChannels.tenantId, tenantId),
-      columns: {
-        id: true, name: true, provider: true, status: true,
-        phoneNumber: true, instanceName: true, isActive: true,
-        connectedAt: true, createdAt: true,
-      },
     });
+
+    // Refresh status from Evolution for channels not yet connected
+    const channels = await Promise.all(rows.map(async (ch) => {
+      if (ch.provider !== "evolution" || !ch.evolutionUrl || !ch.evolutionKey) {
+        const { accessToken, evolutionKey, ...safe } = ch;
+        return safe;
+      }
+      try {
+        const svc = new EvolutionService(ch.evolutionUrl, ch.evolutionKey);
+        const state = await svc.getStatus(ch.instanceName!);
+        const status = svc.mapStatus(state?.instance?.state || "close");
+        if (status !== ch.status) {
+          await db.update(whatsappChannels)
+            .set({ status, updatedAt: new Date(), ...(status === "connected" ? { connectedAt: new Date() } : {}) })
+            .where(eq(whatsappChannels.id, ch.id));
+          ch.status = status;
+        }
+      } catch (e) { /* Evolution unreachable — keep DB status */ }
+      const { accessToken, evolutionKey, ...safe } = ch;
+      return safe;
+    }));
+
     return { channels };
   });
 
@@ -155,16 +172,28 @@ export async function whatsappRoutes(app: FastifyInstance) {
 
     if (channel.provider === "evolution" && channel.evolutionUrl && channel.evolutionKey) {
       const svc = new EvolutionService(channel.evolutionUrl, channel.evolutionKey);
+
+      // First: check if already connected
+      try {
+        const state = await svc.getStatus(channel.instanceName!);
+        const currentStatus = svc.mapStatus(state?.instance?.state || "close");
+        if (currentStatus === "connected") {
+          await db.update(whatsappChannels)
+            .set({ status: "connected", connectedAt: new Date(), updatedAt: new Date() })
+            .where(eq(whatsappChannels.id, id));
+          return { status: "connected", qr: { base64: null } };
+        }
+      } catch (e) { /* ignore — proceed to reconnect */ }
+
+      // Not connected — get new QR
       let qrBase64: string | null = null;
 
       try {
-        // Try recreating (if deleted) — returns QR if qrcode: true
         const created = await svc.createInstance(channel.instanceName!);
         qrBase64 = created?.qrcode?.base64 || created?.hash?.qrcode?.base64 || null;
-      } catch (e) { /* may already exist — proceed to getQR */ }
+      } catch (e) { /* instance already exists — proceed to getQR */ }
 
       if (!qrBase64) {
-        // Instance already exists, just fetch QR
         try {
           const qr = await svc.getQR(channel.instanceName!);
           qrBase64 = qr?.base64 || qr?.qrcode?.base64 || null;
