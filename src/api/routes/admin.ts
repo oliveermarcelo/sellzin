@@ -129,4 +129,43 @@ export async function adminRoutes(app: FastifyInstance) {
     await db.delete(tenants).where(eq(tenants.id, id));
     return { deleted: true };
   });
+
+  // ── Impersonate tenant ──
+  app.post("/tenants/:id/impersonate", { preHandler: [adminAuth] }, async (req, reply) => {
+    const { id } = req.params as any;
+    const tenant = await db.query.tenants.findFirst({ where: eq(tenants.id, id) });
+    if (!tenant) return reply.code(404).send({ error: "Tenant não encontrado" });
+    const token = app.jwt.sign(
+      { tenantId: tenant.id, email: tenant.email },
+      { expiresIn: "2h" }
+    );
+    return { token, tenant: { id: tenant.id, name: tenant.name, email: tenant.email } };
+  });
+
+  // ── Extend trial ──
+  app.post("/tenants/:id/extend-trial", { preHandler: [adminAuth] }, async (req, reply) => {
+    const { id } = req.params as any;
+    const { days } = req.body as any;
+    const trialEndsAt = new Date(Date.now() + (days || 14) * 24 * 60 * 60 * 1000);
+    await db.update(tenants).set({ trialEndsAt, updatedAt: new Date() }).where(eq(tenants.id, id));
+    return { trialEndsAt };
+  });
+
+  // ── Create tenant ──
+  app.post("/tenants", { preHandler: [adminAuth] }, async (req, reply) => {
+    const { name, email, password, plan } = req.body as any;
+    if (!name || !email || !password) return reply.code(400).send({ error: "name, email e password são obrigatórios" });
+    const existing = await db.query.tenants.findFirst({ where: eq(tenants.email, email) });
+    if (existing) return reply.code(409).send({ error: "Email já cadastrado" });
+    const bcrypt = await import("bcryptjs");
+    const { nanoid } = await import("nanoid");
+    const passwordHash = await bcrypt.hash(password, 12);
+    const apiKey = `sk_${nanoid(48)}`;
+    const [tenant] = await db.insert(tenants).values({
+      name, email, passwordHash, apiKey,
+      plan: plan || "starter",
+      trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    }).returning({ id: tenants.id, name: tenants.name, email: tenants.email, plan: tenants.plan });
+    return reply.code(201).send({ tenant });
+  });
 }
