@@ -139,6 +139,13 @@ class ApiClient {
   }
   getComparison() { return this.request("/analytics/compare"); }
 
+  // Automations
+  getAutomations() { return this.request("/automations"); }
+  createAutomation(data: any) { return this.request("/automations", { method: "POST", body: data }); }
+  updateAutomation(id: string, data: any) { return this.request(`/automations/${id}`, { method: "PUT", body: data }); }
+  deleteAutomation(id: string) { return this.request(`/automations/${id}`, { method: "DELETE" }); }
+  toggleAutomation(id: string) { return this.request(`/automations/${id}/toggle`, { method: "PATCH" }); }
+
   // WhatsApp
   getWhatsappChannels() { return this.request("/whatsapp/channels"); }
   createWhatsappChannel(data: any) { return this.request("/whatsapp/channels", { method: "POST", body: data }); }

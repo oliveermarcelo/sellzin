@@ -1,245 +1,475 @@
 "use client";
 // @ts-nocheck
-import { useState } from "react";
-import { PageHeader, Button, Badge, Modal, Input, Select } from "@/components/ui";
-import { Zap, Plus, Play, Pause, ShoppingCart, Package, UserPlus, Calendar, TrendingUp, MessageCircle, Mail, Gift, Clock, ArrowRight, MoreVertical } from "lucide-react";
+import { useState, useEffect } from "react";
+import { api } from "@/lib/api";
+import { PageHeader, Button, Badge, Modal, Input, Loading } from "@/components/ui";
+import {
+  Zap, Plus, ShoppingCart, Package, UserPlus, Calendar,
+  TrendingUp, MessageCircle, Clock, ArrowRight, Trash2,
+} from "lucide-react";
 
-const PRESET_AUTOMATIONS = [
+// ── Trigger definitions ──
+const TRIGGERS = [
+  { value: "cart_abandoned",    label: "Carrinho Abandonado", icon: ShoppingCart, color: "#f97316" },
+  { value: "order_placed",      label: "Pedido Realizado",    icon: Package,      color: "#6366f1" },
+  { value: "order_shipped",     label: "Pedido Enviado",      icon: Package,      color: "#38bdf8" },
+  { value: "order_delivered",   label: "Pedido Entregue",     icon: Package,      color: "#10b981" },
+  { value: "customer_created",  label: "Novo Cliente",        icon: UserPlus,     color: "#10b981" },
+  { value: "customer_birthday", label: "Aniversário",         icon: Calendar,     color: "#ec4899" },
+  { value: "rfm_segment_change",label: "Mudança de Segmento", icon: TrendingUp,   color: "#fbbf24" },
+  { value: "manual",            label: "Manual",              icon: Zap,          color: "#6b7280" },
+];
+
+const TEMPLATES = [
   {
-    id: "cart_30min",
-    name: "Carrinho Abandonado — 30 min",
-    description: "Envia lembrete 30 minutos após abandono",
+    name: "Carrinho Abandonado — 30min",
+    description: "Lembrete 30 minutos após abandono",
     trigger: "cart_abandoned",
-    icon: ShoppingCart,
-    color: "#f97316",
     actions: [
-      { type: "wait", delay: "30 minutos" },
-      { type: "whatsapp", message: "Lembrete sutil com link do carrinho" },
+      { type: "wait", delayValue: 30, delayUnit: "minutes" },
+      { type: "whatsapp", message: "Oi {{nome}}! Vi que você deixou itens no carrinho 🛒 Posso te ajudar com alguma dúvida?" },
     ],
   },
   {
-    id: "cart_24h",
     name: "Carrinho Abandonado — 24h",
-    description: "Mensagem com urgência e cupom após 24 horas",
+    description: "Cupom de desconto após 24 horas",
     trigger: "cart_abandoned",
-    icon: ShoppingCart,
-    color: "#f97316",
     actions: [
-      { type: "wait", delay: "24 horas" },
-      { type: "whatsapp", message: "Urgência + cupom de desconto" },
+      { type: "wait", delayValue: 24, delayUnit: "hours" },
+      { type: "whatsapp", message: "{{nome}}, seu carrinho ainda está esperando! Use o cupom VOLTA10 para 10% de desconto. Válido por 24h ⏰" },
     ],
   },
   {
-    id: "cart_72h",
     name: "Carrinho Abandonado — 72h",
     description: "Última chance com oferta especial",
     trigger: "cart_abandoned",
-    icon: ShoppingCart,
-    color: "#f97316",
     actions: [
-      { type: "wait", delay: "72 horas" },
-      { type: "whatsapp", message: "Última chance + frete grátis" },
+      { type: "wait", delayValue: 72, delayUnit: "hours" },
+      { type: "whatsapp", message: "Última chance, {{nome}}! Seu carrinho vai expirar. Frete grátis na sua próxima compra se finalizar agora 🎁" },
     ],
   },
   {
-    id: "welcome",
     name: "Boas-vindas",
     description: "Mensagem de boas-vindas para novos clientes",
     trigger: "customer_created",
-    icon: UserPlus,
-    color: "#10b981",
     actions: [
-      { type: "wait", delay: "5 minutos" },
-      { type: "whatsapp", message: "Boas-vindas personalizada" },
+      { type: "wait", delayValue: 5, delayUnit: "minutes" },
+      { type: "whatsapp", message: "Olá {{nome}}, seja bem-vindo(a)! 🎉 Ficamos felizes em tê-lo(a) como cliente. Qualquer dúvida estamos aqui!" },
     ],
   },
   {
-    id: "post_purchase",
     name: "Pós-venda",
-    description: "Acompanhamento após entrega",
+    description: "Acompanhamento após entrega do pedido",
     trigger: "order_delivered",
-    icon: Package,
-    color: "#6366f1",
     actions: [
-      { type: "wait", delay: "2 dias" },
-      { type: "whatsapp", message: "Pedir avaliação + NPS" },
-      { type: "wait", delay: "7 dias" },
-      { type: "whatsapp", message: "Sugerir produtos relacionados" },
+      { type: "wait", delayValue: 2, delayUnit: "days" },
+      { type: "whatsapp", message: "Oi {{nome}}! Seu pedido chegou bem? 😊 Adoraríamos saber o que achou!" },
+      { type: "wait", delayValue: 7, delayUnit: "days" },
+      { type: "whatsapp", message: "{{nome}}, esperamos que tenha adorado! Temos novidades te esperando na loja 🛍️" },
     ],
   },
   {
-    id: "birthday",
-    name: "Aniversário",
-    description: "Cupom de desconto no aniversário do cliente",
-    trigger: "customer_birthday",
-    icon: Calendar,
-    color: "#ec4899",
-    actions: [
-      { type: "whatsapp", message: "Parabéns + cupom especial" },
-    ],
-  },
-  {
-    id: "reactivation",
-    name: "Reativação de Inativos",
-    description: "Reengaja clientes que não compram há 30 dias",
-    trigger: "rfm_segment_change",
-    icon: TrendingUp,
-    color: "#fbbf24",
-    actions: [
-      { type: "whatsapp", message: "Sentimos sua falta + oferta" },
-      { type: "wait", delay: "5 dias" },
-      { type: "whatsapp", message: "Última oferta exclusiva" },
-    ],
-  },
-  {
-    id: "order_shipped",
     name: "Pedido Enviado",
-    description: "Notifica cliente com código de rastreamento",
+    description: "Notifica com código de rastreamento",
     trigger: "order_shipped",
-    icon: Package,
-    color: "#38bdf8",
     actions: [
-      { type: "whatsapp", message: "Pedido enviado + link rastreamento" },
+      { type: "whatsapp", message: "{{nome}}, seu pedido foi enviado! 🚚 Código de rastreamento: {{tracking_code}}. Previsão de entrega: 3–7 dias úteis." },
+    ],
+  },
+  {
+    name: "Aniversário",
+    description: "Cupom especial no aniversário do cliente",
+    trigger: "customer_birthday",
+    actions: [
+      { type: "whatsapp", message: "Parabéns {{nome}}! 🎂🎉 Neste dia especial, preparamos um presente: use ANIVER15 para 15% de desconto. Válido por 7 dias!" },
+    ],
+  },
+  {
+    name: "Reativação de Inativos",
+    description: "Reengaja clientes sem compra há 30 dias",
+    trigger: "rfm_segment_change",
+    actions: [
+      { type: "whatsapp", message: "{{nome}}, sentimos sua falta! 💙 Temos uma oferta especial só para você. Confira as novidades!" },
+      { type: "wait", delayValue: 5, delayUnit: "days" },
+      { type: "whatsapp", message: "Última chance {{nome}}! Seu desconto exclusivo expira hoje ⏰" },
     ],
   },
 ];
 
-const triggerLabels: Record<string, string> = {
-  cart_abandoned: "Carrinho Abandonado",
-  order_placed: "Pedido Realizado",
-  order_shipped: "Pedido Enviado",
-  order_delivered: "Pedido Entregue",
-  customer_created: "Novo Cliente",
-  customer_birthday: "Aniversário",
-  rfm_segment_change: "Mudança de Segmento",
-  nps_response: "Resposta NPS",
-  manual: "Manual",
-};
+function getTrigger(value: string) {
+  return TRIGGERS.find(t => t.value === value) || TRIGGERS[TRIGGERS.length - 1];
+}
+
+function formatDelay(a: any) {
+  const unit = a.delayUnit === "minutes" ? "min" : a.delayUnit === "hours" ? "h" : "d";
+  return `${a.delayValue}${unit}`;
+}
+
+function blankAction(type = "whatsapp") {
+  if (type === "wait") return { type: "wait", delayValue: 1, delayUnit: "hours" };
+  if (type === "tag")  return { type: "tag", tag: "", action: "add" };
+  return { type: "whatsapp", message: "" };
+}
+
+const ACTION_ICONS: Record<string, any> = { wait: Clock, whatsapp: MessageCircle, tag: Zap };
 
 export default function AutomationsPage() {
-  const [automations, setAutomations] = useState(PRESET_AUTOMATIONS.map(a => ({ ...a, active: false, executions: 0, conversions: 0 })));
-  const [detailModal, setDetailModal] = useState<any>(null);
+  const [automations, setAutomations] = useState<any[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [saving, setSaving]           = useState(false);
+  const [modal, setModal]             = useState<"create" | "edit" | null>(null);
+  const [editingId, setEditingId]     = useState<string | null>(null);
+  const [showTemplates, setShowTemplates] = useState(true);
+  const [togglingId, setTogglingId]   = useState<string | null>(null);
+  const [deletingId, setDeletingId]   = useState<string | null>(null);
 
-  const toggleAutomation = (id: string) => {
-    setAutomations(prev => prev.map(a => a.id === id ? { ...a, active: !a.active } : a));
+  const EMPTY = { name: "", description: "", trigger: "cart_abandoned", actions: [] as any[] };
+  const [form, setForm] = useState(EMPTY);
+
+  const load = async () => {
+    try {
+      const data = await api.getAutomations();
+      setAutomations(data.automations || []);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   };
 
-  const actionIcons: Record<string, any> = {
-    wait: Clock,
-    whatsapp: MessageCircle,
-    email: Mail,
-    coupon: Gift,
+  useEffect(() => { load(); }, []);
+
+  const openCreate = () => {
+    setForm(EMPTY);
+    setEditingId(null);
+    setShowTemplates(true);
+    setModal("create");
   };
+
+  const openEdit = (a: any) => {
+    setForm({ name: a.name, description: a.description || "", trigger: a.trigger, actions: a.actions || [] });
+    setEditingId(a.id);
+    setShowTemplates(false);
+    setModal("edit");
+  };
+
+  const applyTemplate = (t: any) => {
+    setForm({ name: t.name, description: t.description, trigger: t.trigger, actions: t.actions });
+    setShowTemplates(false);
+  };
+
+  const updateAction = (idx: number, patch: any) =>
+    setForm(f => ({ ...f, actions: f.actions.map((a, i) => i === idx ? { ...a, ...patch } : a) }));
+
+  const changeActionType = (idx: number, type: string) =>
+    setForm(f => ({ ...f, actions: f.actions.map((a, i) => i === idx ? blankAction(type) : a) }));
+
+  const removeAction = (idx: number) =>
+    setForm(f => ({ ...f, actions: f.actions.filter((_, i) => i !== idx) }));
+
+  const addStep = (type: string) =>
+    setForm(f => ({ ...f, actions: [...f.actions, blankAction(type)] }));
+
+  const save = async () => {
+    if (!form.name.trim()) { alert("Nome é obrigatório"); return; }
+    if (form.actions.length === 0) { alert("Adicione pelo menos uma ação"); return; }
+    setSaving(true);
+    try {
+      if (editingId) {
+        await api.updateAutomation(editingId, form);
+      } else {
+        await api.createAutomation(form);
+      }
+      await load();
+      setModal(null);
+    } catch (e: any) { alert(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const toggle = async (id: string) => {
+    setTogglingId(id);
+    try {
+      const res = await api.toggleAutomation(id);
+      setAutomations(prev => prev.map(a => a.id === id ? { ...a, isActive: res.automation.isActive } : a));
+    } catch (e: any) { alert(e.message); }
+    finally { setTogglingId(null); }
+  };
+
+  const del = async (id: string) => {
+    if (!confirm("Excluir esta automação?")) return;
+    setDeletingId(id);
+    try {
+      await api.deleteAutomation(id);
+      setAutomations(prev => prev.filter(a => a.id !== id));
+    } catch (e: any) { alert(e.message); }
+    finally { setDeletingId(null); }
+  };
+
+  if (loading) return <Loading />;
+
+  const activeCount = automations.filter(a => a.isActive).length;
+  const totalExec   = automations.reduce((s, a) => s + (a.totalExecutions  || 0), 0);
+  const totalConv   = automations.reduce((s, a) => s + (a.totalConversions || 0), 0);
 
   return (
     <div>
-      <PageHeader title="Automações" description="Fluxos automáticos de engajamento" />
+      <PageHeader
+        title="Automações"
+        description="Fluxos automáticos de engajamento"
+        actions={<Button size="sm" onClick={openCreate}><Plus className="w-3.5 h-3.5" /> Nova Automação</Button>}
+      />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white border border-gray-200 rounded-xl p-5 text-center">
-          <p className="text-2xl font-bold text-white">{automations.filter(a => a.active).length}</p>
-          <p className="text-xs text-gray-500">Ativas</p>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-5 text-center">
-          <p className="text-2xl font-bold text-white">{automations.reduce((s, a) => s + a.executions, 0)}</p>
-          <p className="text-xs text-gray-500">Execuções</p>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-5 text-center">
-          <p className="text-2xl font-bold text-white">{automations.reduce((s, a) => s + a.conversions, 0)}</p>
-          <p className="text-xs text-gray-500">Conversões</p>
-        </div>
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3 mb-6">
+        {[
+          { label: "Ativas",      value: activeCount },
+          { label: "Execuções",   value: totalExec },
+          { label: "Conversões",  value: totalConv },
+        ].map(s => (
+          <div key={s.label} className="bg-white border border-gray-200 rounded-xl p-4 text-center">
+            <p className="text-2xl font-bold text-gray-900">{s.value}</p>
+            <p className="text-xs text-gray-500">{s.label}</p>
+          </div>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {automations.map((a) => {
-          const Icon = a.icon;
-          return (
-            <div key={a.id} className={`bg-white border rounded-xl p-5 transition ${a.active ? "border-indigo-500/30" : "border-gray-200"}`}>
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: a.color + "15" }}>
-                    <Icon className="w-4 h-4" style={{ color: a.color }} />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-800">{a.name}</h3>
-                    <p className="text-xs text-gray-400">{a.description}</p>
-                  </div>
-                </div>
-                <button onClick={() => toggleAutomation(a.id)}
-                  className={`relative w-10 h-5 rounded-full transition-colors ${a.active ? "bg-indigo-500" : "bg-zinc-700"}`}>
-                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${a.active ? "left-5.5 left-[22px]" : "left-0.5"}`} />
-                </button>
-              </div>
-
-              <div className="flex items-center gap-1 mb-3">
-                <Badge color={a.color} size="xs">{triggerLabels[a.trigger]}</Badge>
-                <ArrowRight className="w-3 h-3 text-gray-400" />
-                {a.actions.map((action, i) => {
-                  const ActionIcon = actionIcons[action.type] || Zap;
-                  return (
-                    <div key={i} className="flex items-center gap-1">
-                      <div className="w-5 h-5 rounded bg-gray-100 flex items-center justify-center" title={action.message || action.delay}>
-                        <ActionIcon className="w-3 h-3 text-gray-500" />
-                      </div>
-                      {i < a.actions.length - 1 && <ArrowRight className="w-2.5 h-2.5 text-gray-400" />}
+      {/* List */}
+      {automations.length === 0 ? (
+        <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
+          <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center mx-auto mb-4">
+            <Zap className="w-6 h-6 text-indigo-500" />
+          </div>
+          <h3 className="text-sm font-semibold text-gray-700 mb-1">Nenhuma automação criada</h3>
+          <p className="text-sm text-gray-400 mb-4">Crie fluxos automáticos para engajar seus clientes</p>
+          <Button size="sm" onClick={openCreate}><Plus className="w-3.5 h-3.5" /> Criar Automação</Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {automations.map(a => {
+            const trig = getTrigger(a.trigger);
+            const TrigIcon = trig.icon;
+            return (
+              <div key={a.id} className={`bg-white border rounded-xl p-5 transition ${a.isActive ? "border-indigo-200" : "border-gray-200"}`}>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: trig.color + "18" }}>
+                      <TrigIcon className="w-4 h-4" style={{ color: trig.color }} />
                     </div>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4 text-xs text-gray-400">
-                  <span>{a.executions} execuções</span>
-                  <span>{a.conversions} conversões</span>
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-800">{a.name}</h3>
+                      {a.description && <p className="text-xs text-gray-400 mt-0.5">{a.description}</p>}
+                    </div>
+                  </div>
+                  {/* Toggle */}
+                  <button
+                    onClick={() => toggle(a.id)}
+                    disabled={!!togglingId}
+                    className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${a.isActive ? "bg-indigo-500" : "bg-gray-300"}`}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${a.isActive ? "left-[22px]" : "left-0.5"}`} />
+                  </button>
                 </div>
-                <button onClick={() => setDetailModal(a)} className="text-xs text-indigo-400 hover:text-indigo-300">
-                  Editar fluxo
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
 
-      {/* Detail Modal */}
-      <Modal open={!!detailModal} onClose={() => setDetailModal(null)} title={detailModal?.name || ""} size="md">
-        {detailModal && (
-          <div className="space-y-4">
-            <div className="bg-gray-50 rounded-lg p-3">
-              <h4 className="text-xs font-semibold text-gray-600 mb-1">Gatilho</h4>
-              <Badge color={detailModal.color}>{triggerLabels[detailModal.trigger]}</Badge>
-            </div>
-
-            <div>
-              <h4 className="text-xs font-semibold text-gray-600 mb-3">Fluxo de Ações</h4>
-              <div className="space-y-3">
-                {detailModal.actions.map((action: any, i: number) => {
-                  const ActionIcon = actionIcons[action.type] || Zap;
-                  return (
-                    <div key={i} className="flex items-start gap-3">
-                      <div className="flex flex-col items-center">
-                        <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
-                          <ActionIcon className="w-4 h-4 text-gray-600" />
+                {/* Flow preview */}
+                <div className="flex items-center gap-1 mb-3 flex-wrap">
+                  <Badge color={trig.color} size="xs">{trig.label}</Badge>
+                  {(a.actions || []).slice(0, 6).map((action: any, i: number) => {
+                    const AIcon = ACTION_ICONS[action.type] || Zap;
+                    return (
+                      <div key={i} className="flex items-center gap-1">
+                        <ArrowRight className="w-2.5 h-2.5 text-gray-300" />
+                        <div className="w-5 h-5 rounded bg-gray-100 flex items-center justify-center"
+                          title={action.type === "wait" ? `Aguardar ${formatDelay(action)}` : action.message || action.type}>
+                          <AIcon className="w-3 h-3 text-gray-500" />
                         </div>
-                        {i < detailModal.actions.length - 1 && <div className="w-px h-6 bg-gray-100" />}
+                        {action.type === "wait" && (
+                          <span className="text-[10px] text-gray-400">{formatDelay(action)}</span>
+                        )}
                       </div>
-                      <div className="pt-1">
-                        <p className="text-sm font-medium text-gray-700">
-                          {action.type === "wait" ? `Aguardar ${action.delay}` : action.type === "whatsapp" ? "WhatsApp" : action.type}
-                        </p>
-                        {action.message && <p className="text-xs text-gray-500 mt-0.5">{action.message}</p>}
-                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <div className="flex items-center gap-4 text-xs text-gray-400">
+                    <span>{a.totalExecutions || 0} execuções</span>
+                    <span>{a.totalConversions || 0} conversões</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => openEdit(a)}
+                      className="text-xs text-indigo-500 hover:text-indigo-700 font-medium">
+                      Editar
+                    </button>
+                    <button onClick={() => del(a.id)} disabled={deletingId === a.id}
+                      className="text-xs text-gray-400 hover:text-red-500">
+                      Excluir
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal */}
+      <Modal
+        open={!!modal}
+        onClose={() => setModal(null)}
+        title={modal === "edit" ? "Editar Automação" : "Nova Automação"}
+        size="lg"
+      >
+        {modal === "create" && showTemplates ? (
+          /* ── Templates ── */
+          <div className="space-y-4">
+            <p className="text-sm text-gray-500">Escolha um template ou crie do zero:</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-96 overflow-y-auto pr-1">
+              {TEMPLATES.map((t, i) => {
+                const trig = getTrigger(t.trigger);
+                const TIcon = trig.icon;
+                return (
+                  <button key={i} onClick={() => applyTemplate(t)}
+                    className="text-left p-3 rounded-lg border border-gray-200 hover:border-indigo-400 hover:bg-indigo-50/50 transition">
+                    <div className="flex items-center gap-2 mb-1">
+                      <TIcon className="w-4 h-4 shrink-0" style={{ color: trig.color }} />
+                      <span className="text-sm font-medium text-gray-800">{t.name}</span>
                     </div>
-                  );
-                })}
+                    <p className="text-xs text-gray-400">{t.description}</p>
+                  </button>
+                );
+              })}
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => setShowTemplates(false)} className="w-full">
+              Criar do Zero
+            </Button>
+          </div>
+        ) : (
+          /* ── Form ── */
+          <div className="space-y-4">
+            {modal === "create" && (
+              <button onClick={() => setShowTemplates(true)}
+                className="text-xs text-indigo-500 hover:underline">
+                ← Voltar aos templates
+              </button>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input label="Nome da automação" value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Ex: Carrinho Abandonado" />
+              <Input label="Descrição (opcional)" value={form.description}
+                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Breve descrição do fluxo" />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-600">Gatilho</label>
+              <select value={form.trigger}
+                onChange={e => setForm(f => ({ ...f, trigger: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg bg-white border border-gray-300 text-sm text-gray-900 focus:outline-none focus:border-red-500 transition">
+                {TRIGGERS.map(t => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Actions builder */}
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-2 block">
+                Passos do Fluxo ({form.actions.length})
+              </label>
+
+              <div className="space-y-2">
+                {form.actions.map((action, idx) => (
+                  <div key={idx} className="flex items-start gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <div className="flex flex-col gap-2 flex-1 min-w-0">
+                      {/* Type selector */}
+                      <select value={action.type}
+                        onChange={e => changeActionType(idx, e.target.value)}
+                        className="w-full px-2 py-1.5 rounded-md bg-white border border-gray-300 text-xs text-gray-700 focus:outline-none focus:border-red-500">
+                        <option value="wait">⏱ Aguardar</option>
+                        <option value="whatsapp">💬 Enviar WhatsApp</option>
+                        <option value="tag">🏷 Adicionar / Remover Tag</option>
+                      </select>
+
+                      {/* Wait fields */}
+                      {action.type === "wait" && (
+                        <div className="flex gap-2">
+                          <input type="number" min={1} value={action.delayValue || 1}
+                            onChange={e => updateAction(idx, { delayValue: Math.max(1, parseInt(e.target.value) || 1) })}
+                            className="w-20 px-2 py-1.5 rounded-md border border-gray-300 text-xs focus:outline-none focus:border-red-500" />
+                          <select value={action.delayUnit || "hours"}
+                            onChange={e => updateAction(idx, { delayUnit: e.target.value })}
+                            className="flex-1 px-2 py-1.5 rounded-md border border-gray-300 text-xs focus:outline-none focus:border-red-500">
+                            <option value="minutes">minutos</option>
+                            <option value="hours">horas</option>
+                            <option value="days">dias</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {/* WhatsApp fields */}
+                      {action.type === "whatsapp" && (
+                        <textarea value={action.message || ""}
+                          onChange={e => updateAction(idx, { message: e.target.value })}
+                          placeholder="Mensagem... Use {{nome}}, {{tracking_code}}, etc."
+                          rows={3}
+                          className="w-full px-2 py-1.5 rounded-md border border-gray-300 text-xs text-gray-700 resize-none focus:outline-none focus:border-red-500" />
+                      )}
+
+                      {/* Tag fields */}
+                      {action.type === "tag" && (
+                        <div className="flex gap-2">
+                          <input value={action.tag || ""}
+                            onChange={e => updateAction(idx, { tag: e.target.value })}
+                            placeholder="nome-da-tag"
+                            className="flex-1 px-2 py-1.5 rounded-md border border-gray-300 text-xs focus:outline-none focus:border-red-500" />
+                          <select value={action.action || "add"}
+                            onChange={e => updateAction(idx, { action: e.target.value })}
+                            className="px-2 py-1.5 rounded-md border border-gray-300 text-xs focus:outline-none focus:border-red-500">
+                            <option value="add">Adicionar</option>
+                            <option value="remove">Remover</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    <button onClick={() => removeAction(idx)}
+                      className="mt-1 p-1 rounded text-gray-400 hover:text-red-500 transition shrink-0">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+
+                {form.actions.length === 0 && (
+                  <p className="text-xs text-gray-400 py-3 text-center border border-dashed border-gray-200 rounded-lg">
+                    Nenhum passo adicionado
+                  </p>
+                )}
+              </div>
+
+              {/* Add step buttons */}
+              <div className="flex gap-2 mt-3 flex-wrap">
+                <button onClick={() => addStep("whatsapp")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition">
+                  <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                </button>
+                <button onClick={() => addStep("wait")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition">
+                  <Clock className="w-3.5 h-3.5" /> Aguardar
+                </button>
+                <button onClick={() => addStep("tag")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition">
+                  <Zap className="w-3.5 h-3.5" /> Tag
+                </button>
               </div>
             </div>
 
-            <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-lg p-3">
-              <p className="text-xs text-gray-500">
-                <Zap className="w-3 h-3 inline mr-1 text-indigo-400" />
-                As mensagens são geradas automaticamente pela IA com base no perfil do cliente e contexto da compra.
-              </p>
+            <div className="flex gap-2 pt-2">
+              <Button onClick={save} loading={saving} className="flex-1">
+                {modal === "edit" ? "Salvar Alterações" : "Criar Automação"}
+              </Button>
+              <Button variant="secondary" onClick={() => setModal(null)} className="flex-1">
+                Cancelar
+              </Button>
             </div>
           </div>
         )}

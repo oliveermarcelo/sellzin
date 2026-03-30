@@ -14,6 +14,7 @@ import { webhookRoutes } from "./routes/webhooks";
 import assistantRoutes from "./routes/assistant";
 import { whatsappRoutes } from "./routes/whatsapp";
 import { adminRoutes } from "./routes/admin";
+import { automationRoutes } from "./routes/automations";
 
 const PORT = parseInt(process.env.API_PORT || "3001");
 
@@ -77,6 +78,7 @@ async function buildServer() {
   await app.register(webhookRoutes, { prefix: "/v1/webhooks" });
   await app.register(whatsappRoutes, { prefix: "/v1/whatsapp" });
   await app.register(adminRoutes, { prefix: "/v1/admin" });
+  await app.register(automationRoutes, { prefix: "/v1/automations" });
   await app.register(assistantRoutes, { prefix: "/v1" });
 
   return app;
