@@ -1,6 +1,6 @@
 "use client";
 // @ts-nocheck
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { formatCurrency, formatNumber, getSegmentLabel, getSegmentColor } from "@/lib/utils";
 import { PageHeader, Loading, Tabs, StatCard, DateRangePicker } from "@/components/ui";
@@ -19,13 +19,19 @@ export default function AnalyticsPage() {
 
   const dateParams = startDate && endDate ? { startDate, endDate } : undefined;
 
-  useEffect(() => { loadAll(); }, [startDate, endDate]);
-  useEffect(() => { loadRevenue(); }, [revenueGroup, startDate, endDate]);
-
-  async function loadAll() {
+  const loadRevenue = useCallback(async () => {
     try {
+      const params = startDate && endDate ? { startDate, endDate } : undefined;
+      const data = await api.getRevenue(revenueGroup, params);
+      setRevenueData(data.data || []);
+    } catch (e) { console.error(e); }
+  }, [revenueGroup, startDate, endDate]);
+
+  const loadAll = useCallback(async () => {
+    try {
+      const params = startDate && endDate ? { startDate, endDate } : undefined;
       const [ov, seg, prod, comp] = await Promise.all([
-        api.getOverview(dateParams), api.getRfm(), api.getTopProducts(10, dateParams), api.getComparison(),
+        api.getOverview(params), api.getRfm(), api.getTopProducts(10, params), api.getComparison(),
       ]);
       setOverview(ov);
       setSegments(seg.segments || []);
@@ -33,14 +39,10 @@ export default function AnalyticsPage() {
       setComparison(comp.comparison || []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }
+  }, [startDate, endDate]);
 
-  async function loadRevenue() {
-    try {
-      const data = await api.getRevenue(revenueGroup, dateParams);
-      setRevenueData(data.data || []);
-    } catch (e) { console.error(e); }
-  }
+  useEffect(() => { loadAll(); }, [loadAll]);
+  useEffect(() => { loadRevenue(); }, [loadRevenue]);
 
   if (loading) return <Loading />;
 
