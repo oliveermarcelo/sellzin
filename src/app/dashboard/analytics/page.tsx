@@ -47,12 +47,23 @@ export default function AnalyticsPage() {
   if (loading) return <Loading />;
 
   const maxRevenue = Math.max(...revenueData.map((d: any) => parseFloat(d.revenue) || 0), 1);
+
+  // Compute totals from chart data (reflects current date range + grouping)
+  const chartTotalRevenue = revenueData.reduce((s, d) => s + (parseFloat(d.revenue) || 0), 0);
+  const chartTotalOrders = revenueData.reduce((s, d) => s + (parseInt(d.orders) || 0), 0);
+  const chartAvgOrder = chartTotalOrders > 0 ? chartTotalRevenue / chartTotalOrders : 0;
+
   const current = comparison.find((c: any) => c.period === "current");
   const previous = comparison.find((c: any) => c.period === "previous");
   const revenueChange = previous?.revenue > 0
     ? (((current?.revenue - previous?.revenue) / previous?.revenue) * 100).toFixed(1) : "0";
   const ordersChange = previous?.orders > 0
     ? (((current?.orders - previous?.orders) / previous?.orders) * 100).toFixed(1) : "0";
+
+  const groupLabel = revenueGroup === "month" ? "Mensal" : revenueGroup === "week" ? "Semanal" : "Diário";
+  const periodLabel = startDate && endDate
+    ? `${new Date(startDate + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} – ${new Date(endDate + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`
+    : revenueGroup === "month" ? "90 dias" : revenueGroup === "week" ? "90 dias" : "90 dias";
 
   const totalContacts = segments.reduce((s: number, seg: any) => s + seg.count, 0);
 
@@ -68,27 +79,20 @@ export default function AnalyticsPage() {
         }
       />
 
-      {/* Comparison Cards */}
-      {(() => {
-        const periodLabel = startDate && endDate
-          ? `${new Date(startDate + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} – ${new Date(endDate + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}`
-          : "7d";
-        return (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            <StatCard label={`Faturamento (${periodLabel})`} value={formatCurrency(startDate && endDate ? overview?.revenue?.current || 0 : current?.revenue || 0)}
-              icon={<DollarSign className="w-4 h-4" />}
-              trend={!startDate ? { value: `${revenueChange}%`, positive: parseFloat(revenueChange) >= 0 } : undefined}
-              sub={!startDate ? "vs semana anterior" : undefined} />
-            <StatCard label={`Pedidos (${periodLabel})`} value={formatNumber(startDate && endDate ? overview?.orders?.total || 0 : current?.orders || 0)}
-              icon={<ShoppingCart className="w-4 h-4" />}
-              trend={!startDate ? { value: `${ordersChange}%`, positive: parseFloat(ordersChange) >= 0 } : undefined}
-              sub={!startDate ? "vs semana anterior" : undefined} />
-            <StatCard label="Ticket Médio" value={formatCurrency(startDate && endDate ? overview?.orders?.avgValue || 0 : current?.avg_value || 0)} />
-            <StatCard label="Recompra" value={`${overview?.contacts?.repurchaseRate || 0}%`}
-              icon={<Users className="w-4 h-4" />} />
-          </div>
-        );
-      })()}
+      {/* Summary Cards — driven by chart data */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <StatCard label={`Faturamento (${periodLabel})`} value={formatCurrency(chartTotalRevenue)}
+          icon={<DollarSign className="w-4 h-4" />}
+          trend={!startDate ? { value: `${revenueChange}%`, positive: parseFloat(revenueChange) >= 0 } : undefined}
+          sub={!startDate ? "vs semana anterior" : undefined} />
+        <StatCard label={`Pedidos (${periodLabel})`} value={formatNumber(chartTotalOrders)}
+          icon={<ShoppingCart className="w-4 h-4" />}
+          trend={!startDate ? { value: `${ordersChange}%`, positive: parseFloat(ordersChange) >= 0 } : undefined}
+          sub={!startDate ? "vs semana anterior" : undefined} />
+        <StatCard label="Ticket Médio" value={formatCurrency(chartAvgOrder)} />
+        <StatCard label="Recompra" value={`${overview?.contacts?.repurchaseRate || 0}%`}
+          icon={<Users className="w-4 h-4" />} />
+      </div>
 
       {/* Revenue Chart */}
       <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
