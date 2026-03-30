@@ -78,7 +78,7 @@ services:
 
   # ── Evolution API (WhatsApp) ──
   evolution:
-    image: atendai/evolution-api:v2.2.3
+    image: ghcr.io/evolutionapi/evolution-api:latest
     container_name: sellzin-evolution
     restart: unless-stopped
     ports:
