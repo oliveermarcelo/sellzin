@@ -4,145 +4,417 @@ import { db } from "../../lib/db";
 import { contacts, orders, abandonedCarts, campaigns, stores, interactions, assistantMessages } from "../../lib/db/schema";
 import { eq, and, sql, desc, ilike, or, gte, lte } from "drizzle-orm";
 
-// ── LLM Integration (OpenAI GPT-4o Mini + Groq fallback) ──
+// ── LLM Integration (OpenAI GPT-4o + Groq fallback) ──
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o";
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
-const SYSTEM_PROMPT = `Você é o assistente IA do Sellzin CRM, especializado EXCLUSIVAMENTE em e-commerce e CRM.
-REGRAS OBRIGATÓRIAS:
-- Responda APENAS sobre: vendas, pedidos, clientes, contatos, carrinhos abandonados, campanhas, segmentação RFM, faturamento, analytics de e-commerce e funcionalidades do Sellzin.
-- Se o usuário perguntar algo fora do escopo (política, receitas, piadas, clima, esportes, programação, qualquer outro assunto), responda educadamente: "Sou o assistente do Sellzin CRM e posso ajudar apenas com questões do seu e-commerce. Pergunte sobre vendas, clientes, pedidos ou campanhas! 😊"
-- NUNCA responda perguntas que não sejam sobre o CRM/e-commerce, mesmo que insistam.
-- Use português do Brasil, tom profissional e amigável.
-- Use emojis com moderação. Seja direto mas gentil.
-- CRÍTICO: JAMAIS altere, abrevie ou modifique nomes de produtos, clientes ou SKUs — copie EXATAMENTE como estão nos dados.
-- CRÍTICO: JAMAIS altere valores numéricos. Os números nos dados são a fonte da verdade — não recalcule, não estime, não arredonde diferente.
-- CRÍTICO: "total_revenue" já é o faturamento total do produto (quantidade × preço). Não divida nem recalcule.
-- Quando houver dados numéricos, destaque os mais importantes e dê insights práticos.
-- Se os números forem baixos ou zero, sugira ações concretas para melhorar.
-- Se os números forem bons, parabenize e sugira como manter o crescimento.
-- Nunca invente dados — use apenas os dados fornecidos abaixo.
-- Formate valores em R$ quando aplicável. Mantenha a resposta curta (máx 200 palavras).
-- Ao final, sugira 1-2 próximos passos práticos relacionados ao CRM.`;
+const SYSTEM_PROMPT = `Você é o assistente IA do Sellzin CRM.
 
-async function callLLM(apiUrl: string, apiKey: string, model: string, messages: any[]): Promise<string | null> {
-  const res = await fetch(apiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 500 }),
-  });
-  if (!res.ok) {
-    console.error(`[llm] ${model} error:`, res.status);
-    return null;
-  }
-  const json = await res.json();
-  return json.choices?.[0]?.message?.content || null;
-}
+REGRAS CRÍTICAS:
+- Use APENAS dados retornados pelas ferramentas. NUNCA invente números, nomes ou dados.
+- Se os dados estiverem vazios, diga que não há informações disponíveis.
+- Sempre use uma ferramenta antes de responder sobre dados da loja.
+- Responda SOMENTE sobre: vendas, pedidos, clientes, carrinhos, campanhas, produtos e analytics.
+- Para perguntas fora do escopo, recuse educadamente.
+- Português do Brasil. Tom profissional e direto. Máx 300 palavras.
+- Formate valores em R$ (ex: R$ 1.234,56).
+- Destaque os números mais importantes em negrito.
+- Termine com 1-2 insights ou sugestões práticas baseadas nos dados reais.`;
 
-async function humanizeWithLLM(rawData: string, userMessage: string, intent: string): Promise<string> {
-  const messages = [
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: `O lojista perguntou: "${userMessage}"\n\nDados reais do CRM (intent: ${intent}):\n${rawData}\n\nIMPORTANTE: Exiba os dados EXATAMENTE como estão acima — não altere nomes, números, valores ou quantidades. Apenas adicione no final um breve comentário/insight (1-2 frases) e 1-2 próximos passos. Nunca invente ou modifique nenhum dado.` }
-  ];
-
-  try {
-    // Tenta OpenAI primeiro
-    if (OPENAI_API_KEY) {
-      const result = await callLLM("https://api.openai.com/v1/chat/completions", OPENAI_API_KEY, OPENAI_MODEL, messages);
-      if (result) return result;
-    }
-    // Fallback: Groq
-    if (GROQ_API_KEY) {
-      const result = await callLLM("https://api.groq.com/openai/v1/chat/completions", GROQ_API_KEY, GROQ_MODEL, messages);
-      if (result) return result;
-    }
-    return rawData;
-  } catch (err) {
-    console.error("[llm] Error:", err);
-    return rawData;
-  }
-}
-
-// Intent detection patterns
-const INTENT_PATTERNS: { intent: string; patterns: RegExp[] }[] = [
-  { intent: "overview", patterns: [/como est(ão|a) (as vendas|o negócio|a loja|meu e-?commerce)/i, /visão geral/i, /dashboard/i, /resumo/i, /overview/i] },
-  { intent: "revenue", patterns: [/faturamento/i, /receita/i, /vendas/i, /quanto (vendi|faturei|entrou)/i, /revenue/i, /ultim[ao]s?\s+\d+\s*(horas?|dias?|semanas?|m[eê]s)/i, /hoje/i, /essa semana/i, /esse m[eê]s/i] },
-  { intent: "orders", patterns: [/pedidos/i, /orders/i, /encomendas/i, /quantos pedidos/i] },
-  { intent: "contacts_stats", patterns: [/quantos (clientes|contatos)/i, /clientes novos/i, /^contatos$/i, /meus clientes$/i] },
-  { intent: "contacts_segment", patterns: [/vip/i, /champions/i, /leais/i, /loyal/i, /em risco/i, /at.risk/i, /inativos/i, /lost/i, /hibernating/i, /potenciais/i, /novos clientes/i, /melhores clientes/i, /top clientes/i, /clientes vip/i] },
-  { intent: "search_contact", patterns: [/busca(r|) (cliente|contato)/i, /procura(r|) (cliente|contato)/i, /encontra(r|)/i, /quem é/i, /info(rmações|) (do|da|sobre)/i] },
-  { intent: "carts", patterns: [/carrinho/i, /abandonad/i, /cart/i, /recupera(r|ção)/i] },
-  { intent: "recover", patterns: [/recuperar/i, /disparar recuperação/i, /enviar lembrete/i, /mandar mensagem.*carrinho/i] },
-  { intent: "campaign_create", patterns: [/cria(r|) campanha/i, /nova campanha/i, /disparo/i, /enviar.*campanha/i, /criar.*disparo/i] },
-  { intent: "campaign_quick", patterns: [/disparo rápido/i, /enviar.*mensagem.*para/i, /mandar.*msg.*para/i, /notificar/i] },
-  { intent: "campaigns_list", patterns: [/campanhas/i, /campaigns/i, /lista(r|) campanha/i] },
-  { intent: "products", patterns: [/produto/i, /top.*(produto|vend)/i, /mais vendid/i, /product/i] },
-  { intent: "rfm", patterns: [/rfm/i, /segment/i, /distribuição/i] },
-  { intent: "compare", patterns: [/compara/i, /semana anterior/i, /evolução/i, /tendência/i] },
-  { intent: "stores", patterns: [/loja/i, /store/i, /integraç/i, /conecta/i, /woocommerce/i, /magento/i] },
-  { intent: "sync", patterns: [/sincroniz/i, /sync/i, /atualizar dados/i] },
-  { intent: "help", patterns: [/ajuda/i, /help/i, /o que você (pode|faz)/i, /comando/i] },
+// ── Tool definitions (OpenAI function calling format) ──
+const TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "get_overview",
+      description: "Retorna visão geral do e-commerce: faturamento, pedidos, contatos e carrinhos dos últimos 30 dias.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_revenue",
+      description: "Retorna faturamento detalhado para um período específico, com comparativo e breakdown diário.",
+      parameters: {
+        type: "object",
+        properties: {
+          days: { type: "number", description: "Número de dias para o período (padrão: 30)" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_orders",
+      description: "Lista pedidos recentes, podendo filtrar por status e período.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: { type: "string", description: "Status do pedido: pending, processing, delivered, cancelled" },
+          days: { type: "number", description: "Filtrar pedidos dos últimos N dias" },
+          limit: { type: "number", description: "Número máximo de pedidos a retornar (padrão: 10)" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_contacts",
+      description: "Lista contatos/clientes, podendo filtrar por segmento RFM ou busca textual.",
+      parameters: {
+        type: "object",
+        properties: {
+          segment: { type: "string", description: "Segmento RFM: champions, loyal, potential, new_customers, at_risk, cant_lose, hibernating, lost" },
+          search: { type: "string", description: "Busca por nome, email ou telefone" },
+          limit: { type: "number", description: "Número máximo de contatos (padrão: 10)" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_abandoned_carts",
+      description: "Retorna estatísticas e lista de carrinhos abandonados não recuperados.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "Número máximo de carrinhos a listar (padrão: 5)" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_top_products",
+      description: "Retorna os produtos mais vendidos por faturamento em um período.",
+      parameters: {
+        type: "object",
+        properties: {
+          days: { type: "number", description: "Período em dias (padrão: 30)" },
+          limit: { type: "number", description: "Número de produtos a retornar (padrão: 10)" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_rfm_segments",
+      description: "Retorna a distribuição de clientes por segmento RFM (Recência, Frequência, Valor).",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_campaigns",
+      description: "Lista as campanhas de marketing criadas na loja.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "Número máximo de campanhas (padrão: 10)" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "compare_periods",
+      description: "Compara o faturamento do período atual com o período anterior.",
+      parameters: {
+        type: "object",
+        properties: {
+          days: { type: "number", description: "Tamanho de cada período em dias (padrão: 7)" },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_tracking_stats",
+      description: "Retorna estatísticas de rastreamento de eventos (pageviews, eventos web, visitantes).",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
 ];
 
-function detectIntent(message: string): { intent: string; confidence: number } {
-  for (const { intent, patterns } of INTENT_PATTERNS) {
-    for (const pattern of patterns) {
-      if (pattern.test(message)) {
-        return { intent, confidence: 0.9 };
+// ── Execute a tool by name ──
+async function executeTool(name: string, args: any, tenantId: string): Promise<string> {
+  try {
+    switch (name) {
+
+      case "get_overview": {
+        const [rev, ord, ct, cart] = await Promise.all([
+          getRevenueSummary(tenantId),
+          getOrdersSummary(tenantId),
+          getContactsSummary(tenantId),
+          getCartsSummary(tenantId),
+        ]);
+        return JSON.stringify({ revenue: rev, orders: ord, contacts: ct, carts: cart });
       }
+
+      case "get_revenue": {
+        const days = args.days ?? 30;
+        const [periodData, prevData, recent] = await Promise.all([
+          getRevenueForPeriod(tenantId, days, 0),
+          getRevenueForPeriod(tenantId, days * 2, days),
+          getRecentRevenue(tenantId, days),
+        ]);
+        return JSON.stringify({ period: periodData, previous: prevData, daily: recent, days });
+      }
+
+      case "get_orders": {
+        const limit = args.limit ?? 10;
+        const days = args.days ?? 30;
+
+        let whereConditions: any[] = [eq(orders.tenantId, tenantId)];
+        if (args.status) {
+          const statusList = args.status.includes(",")
+            ? args.status.split(",").map((s: string) => s.trim())
+            : [args.status];
+          whereConditions.push(sql`${orders.status} = ANY(ARRAY[${sql.join(statusList.map((s: string) => sql`${s}`), sql`, `)}])`);
+        }
+        if (days) {
+          whereConditions.push(gte(orders.placedAt, sql`NOW() - INTERVAL '1 day' * ${days}`));
+        }
+
+        const stats = await getOrdersSummary(tenantId);
+        const recent = await db.query.orders.findMany({
+          where: and(...whereConditions),
+          orderBy: [desc(orders.placedAt)],
+          limit,
+          with: { contact: true },
+        });
+
+        const mapped = recent.map((o: any) => ({
+          orderNumber: o.orderNumber,
+          contact: o.contact ? `${o.contact.firstName} ${o.contact.lastName}`.trim() : "—",
+          total: o.total,
+          status: o.status,
+          placedAt: o.placedAt,
+        }));
+
+        return JSON.stringify({ stats, orders: mapped });
+      }
+
+      case "get_contacts": {
+        const limit = args.limit ?? 10;
+        let whereConditions: any[] = [eq(contacts.tenantId, tenantId)];
+
+        if (args.segment) {
+          whereConditions.push(eq(contacts.rfmSegment, args.segment as any));
+        }
+        if (args.search) {
+          const q = args.search;
+          whereConditions.push(or(
+            ilike(contacts.firstName, `%${q}%`),
+            ilike(contacts.lastName, `%${q}%`),
+            ilike(contacts.email, `%${q}%`),
+            ilike(contacts.phone, `%${q}%`),
+          ));
+        }
+
+        const result = await db.query.contacts.findMany({
+          where: and(...whereConditions),
+          orderBy: [desc(contacts.totalSpent)],
+          limit,
+          with: args.search ? { orders: { limit: 3, orderBy: [desc(orders.placedAt)] } } : undefined,
+        });
+
+        const mapped = result.map((c: any) => ({
+          name: `${c.firstName} ${c.lastName}`.trim(),
+          email: c.email,
+          phone: c.phone,
+          city: c.city,
+          state: c.state,
+          rfmSegment: c.rfmSegment,
+          rfmScore: c.rfmScore,
+          totalOrders: c.totalOrders,
+          totalSpent: c.totalSpent,
+          recentOrders: c.orders?.map((o: any) => ({ orderNumber: o.orderNumber, total: o.total })),
+        }));
+
+        return JSON.stringify({ contacts: mapped, segment: args.segment, search: args.search });
+      }
+
+      case "get_abandoned_carts": {
+        const limit = args.limit ?? 5;
+        const stats = await getCartsSummary(tenantId);
+        const recent = await db.query.abandonedCarts.findMany({
+          where: and(eq(abandonedCarts.tenantId, tenantId), eq(abandonedCarts.isRecovered, false)),
+          orderBy: [desc(abandonedCarts.abandonedAt)],
+          limit,
+          with: { contact: true },
+        });
+
+        const mapped = recent.map((c: any) => ({
+          contact: c.contact ? `${c.contact.firstName} ${c.contact.lastName}`.trim() : c.email || "Anônimo",
+          total: c.total,
+          items: (c.items as any[] || []).slice(0, 3).map((i: any) => i.name),
+          recoveryAttempts: c.recoveryAttempts ?? 0,
+          abandonedAt: c.abandonedAt,
+        }));
+
+        return JSON.stringify({ stats, pendingCarts: mapped });
+      }
+
+      case "get_top_products": {
+        const days = args.days ?? 30;
+        const limit = args.limit ?? 10;
+
+        const result = await db.execute(sql`
+          SELECT
+            item->>'name' as name,
+            item->>'sku' as sku,
+            SUM(COALESCE((item->>'quantity')::numeric, 1)) as total_quantity,
+            SUM(COALESCE(NULLIF(item->>'total', '')::numeric, COALESCE(NULLIF(item->>'price', '')::numeric, 0) * COALESCE((item->>'quantity')::numeric, 1))) as total_revenue
+          FROM orders, jsonb_array_elements(items::jsonb) as item
+          WHERE tenant_id = ${tenantId}
+            AND placed_at >= NOW() - INTERVAL '1 day' * ${days}
+            AND item->>'name' IS NOT NULL
+          GROUP BY item->>'name', item->>'sku'
+          ORDER BY total_revenue DESC
+          LIMIT ${limit}
+        `);
+
+        return JSON.stringify({ products: getRows(result), days });
+      }
+
+      case "get_rfm_segments": {
+        const segDist = await getSegmentDistribution(tenantId);
+        const total = segDist.reduce((s: number, seg: any) => s + parseInt(seg.count), 0);
+        return JSON.stringify({ segments: segDist, total });
+      }
+
+      case "get_campaigns": {
+        const limit = args.limit ?? 10;
+        const allCampaigns = await db.query.campaigns.findMany({
+          where: eq(campaigns.tenantId, tenantId),
+          orderBy: [desc(campaigns.createdAt)],
+          limit,
+        });
+
+        const mapped = allCampaigns.map((c: any) => ({
+          name: c.name,
+          status: c.status,
+          channel: c.channel,
+          totalSent: c.totalSent,
+          totalRead: c.totalRead,
+          totalConverted: c.totalConverted,
+          revenue: c.revenue,
+          conversionRate: c.totalSent > 0 ? ((c.totalConverted / c.totalSent) * 100).toFixed(1) : "0",
+        }));
+
+        return JSON.stringify({ campaigns: mapped });
+      }
+
+      case "compare_periods": {
+        const days = args.days ?? 7;
+        const [current, previous] = await Promise.all([
+          getRevenueForPeriod(tenantId, days, 0),
+          getRevenueForPeriod(tenantId, days * 2, days),
+        ]);
+        const revChange = previous.revenue > 0
+          ? (((current.revenue - previous.revenue) / previous.revenue) * 100).toFixed(1)
+          : null;
+        const ordChange = previous.orders > 0
+          ? (((current.orders - previous.orders) / previous.orders) * 100).toFixed(1)
+          : null;
+        return JSON.stringify({ current, previous, revChange, ordChange, days });
+      }
+
+      case "get_tracking_stats": {
+        const result = await db.execute(sql`
+          SELECT
+            COUNT(*) as total_events,
+            COUNT(DISTINCT session_id) as total_sessions,
+            COUNT(DISTINCT visitor_id) as total_visitors,
+            COUNT(CASE WHEN event_type = 'pageview' THEN 1 END) as pageviews,
+            COUNT(CASE WHEN created_at >= NOW() - INTERVAL '24 hours' THEN 1 END) as last_24h
+          FROM tracking_events
+          WHERE tenant_id = ${tenantId}
+        `);
+        return JSON.stringify(getRows(result)[0] || {});
+      }
+
+      default:
+        return JSON.stringify({ error: `Unknown tool: ${name}` });
+    }
+  } catch (err: any) {
+    console.error(`[tool:${name}] Error:`, err);
+    return JSON.stringify({ error: err.message });
+  }
+}
+
+// ── Call LLM with function calling support ──
+// Returns the raw message object (may contain tool_calls)
+async function callLLMWithTools(messages: any[]): Promise<any> {
+  const body = {
+    model: OPENAI_MODEL,
+    messages,
+    tools: TOOLS,
+    tool_choice: "auto",
+    temperature: 0.3,
+    max_tokens: 800,
+  };
+
+  // Try OpenAI first
+  if (OPENAI_API_KEY) {
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${OPENAI_API_KEY}` },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const msg = json.choices?.[0]?.message;
+        if (msg) return msg;
+      } else {
+        console.error("[llm] OpenAI error:", res.status, await res.text().catch(() => ""));
+      }
+    } catch (err) {
+      console.error("[llm] OpenAI fetch error:", err);
     }
   }
-  return { intent: "unknown", confidence: 0 };
-}
 
-function extractSegment(message: string): string | null {
-  const map: Record<string, string> = {
-    vip: "champions", campeões: "champions", champions: "champions",
-    "melhores clientes": "champions", "melhores": "champions", "top clientes": "champions",
-    leais: "loyal", fiéis: "loyal", loyal: "loyal",
-    potenciais: "potential", potential: "potential",
-    novos: "new_customers", "novos clientes": "new_customers",
-    risco: "at_risk", "em risco": "at_risk", at_risk: "at_risk",
-    "não pode perder": "cant_lose", cant_lose: "cant_lose",
-    inativos: "hibernating", hibernating: "hibernating",
-    perdidos: "lost", lost: "lost",
-  };
-  const lower = message.toLowerCase();
-  for (const [keyword, segment] of Object.entries(map)) {
-    if (lower.includes(keyword)) return segment;
+  // Fallback: Groq (llama-3.3-70b-versatile supports function calling)
+  if (GROQ_API_KEY) {
+    try {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
+        body: JSON.stringify({ ...body, model: GROQ_MODEL }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const msg = json.choices?.[0]?.message;
+        if (msg) return msg;
+      } else {
+        console.error("[llm] Groq error:", res.status, await res.text().catch(() => ""));
+      }
+    } catch (err) {
+      console.error("[llm] Groq fetch error:", err);
+    }
   }
-  return null;
-}
 
-function extractSearchQuery(message: string): string | null {
-  const patterns = [
-    /buscar?\s+(?:cliente|contato)\s+(.+)/i,
-    /procurar?\s+(?:cliente|contato)\s+(.+)/i,
-    /quem é\s+(.+)/i,
-    /informações?\s+(?:do|da|sobre)\s+(.+)/i,
-    /encontrar?\s+(.+)/i,
-  ];
-  for (const p of patterns) {
-    const match = message.match(p);
-    if (match) return match[1].trim();
-  }
-  return null;
-}
-
-function extractDays(message: string): number {
-  const hours = message.match(/(\d+)\s*horas?/i);
-  if (hours) return Math.max(Math.ceil(parseInt(hours[1]) / 24), 1);
-  const days = message.match(/(\d+)\s*dias?/i);
-  if (days) return Math.min(Math.max(parseInt(days[1]), 1), 365);
-  if (/hoje/i.test(message)) return 1;
-  if (/semana/i.test(message)) return 7;
-  if (/quinzena/i.test(message)) return 15;
-  if (/m[eê]s/i.test(message)) return 30;
-  if (/trimestre/i.test(message)) return 90;
-  if (/ano/i.test(message)) return 365;
-  return 30;
+  return { role: "assistant", content: "Não foi possível conectar ao serviço de IA no momento. Tente novamente em instantes." };
 }
 
 function fmt(n: number | string | null | undefined): string {
@@ -170,521 +442,68 @@ export default async function assistantRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: "message is required" });
     }
 
-    const { intent, confidence } = detectIntent(message);
-    let response = "";
-    let data: any = null;
-    let actions: any[] = [];
-    let suggestions: string[] = [];
+    let finalResponse = "";
 
     try {
-      switch (intent) {
+      // Build initial message list
+      const messages: any[] = [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: message },
+      ];
 
-        // ── OVERVIEW ──
-        case "overview": {
-          const [revResult, ordResult, ctResult, cartResult] = await Promise.all([
-            getRevenueSummary(tenantId),
-            getOrdersSummary(tenantId),
-            getContactsSummary(tenantId),
-            getCartsSummary(tenantId),
-          ]);
+      // First LLM call
+      let assistantMsg = await callLLMWithTools(messages);
+      messages.push(assistantMsg);
 
-          response = `📊 **Visão Geral do seu E-commerce**\n\n`;
-          response += `💰 **Faturamento (30d):** ${fmt(revResult.current)}`;
-          if (revResult.change !== 0) response += ` (${revResult.change > 0 ? "+" : ""}${revResult.change.toFixed(1)}% vs anterior)`;
-          response += `\n📦 **Pedidos:** ${fmtN(ordResult.total)} | Ticket médio: ${fmt(ordResult.avgValue)}`;
-          response += `\n👥 **Contatos:** ${fmtN(ctResult.total)} | ${ctResult.newThisMonth} novos este mês | Recompra: ${ctResult.repurchaseRate}%`;
-          response += `\n🛒 **Carrinhos:** ${cartResult.abandoned} abandonados | ${cartResult.recovered} recuperados (${fmt(cartResult.recoveredValue)})`;
-
-          if (parseFloat(cartResult.recoveryRate) < 10) {
-            response += `\n\n💡 Sua taxa de recuperação está em ${cartResult.recoveryRate}%. Disparar recuperação pode aumentar a receita.`;
-            suggestions = ["Recuperar carrinhos abandonados", "Ver clientes em risco", "Criar campanha de reengajamento"];
-          } else {
-            suggestions = ["Ver top produtos", "Clientes VIP", "Faturamento da semana"];
+      // Function calling loop
+      let iterations = 0;
+      const MAX_ITERATIONS = 5;
+      while (assistantMsg.tool_calls?.length > 0 && iterations < MAX_ITERATIONS) {
+        iterations++;
+        for (const toolCall of assistantMsg.tool_calls) {
+          const toolName = toolCall.function.name;
+          let toolArgs: any = {};
+          try {
+            toolArgs = JSON.parse(toolCall.function.arguments || "{}");
+          } catch {
+            toolArgs = {};
           }
 
-          data = { revenue: revResult, orders: ordResult, contacts: ctResult, carts: cartResult };
-          break;
-        }
+          console.log(`[assistant] Calling tool: ${toolName}`, toolArgs);
+          const toolResult = await executeTool(toolName, toolArgs, tenantId);
 
-        // ── REVENUE ──
-        case "revenue": {
-          const days = extractDays(message);
-          const periodData = await getRevenueForPeriod(tenantId, days, 0);
-          const prevData = await getRevenueForPeriod(tenantId, days * 2, days);
-          const recent = await getRecentRevenue(tenantId, days);
-          const change = prevData.revenue > 0 ? (((periodData.revenue - prevData.revenue) / prevData.revenue) * 100).toFixed(1) : null;
-
-          const periodLabel = days === 1 ? "24 horas" : `${days} dias`;
-          response = `💰 **Faturamento — Últimos ${periodLabel}**\n\n`;
-          response += `Total: ${fmt(periodData.revenue)} | ${periodData.orders} pedidos | Ticket médio: ${fmt(periodData.avgValue)}`;
-          if (change) response += ` (${parseFloat(change) >= 0 ? "+" : ""}${change}% vs período anterior)`;
-          response += `\n\n📈 Detalhamento:\n`;
-          for (const day of recent) {
-            const bar = "█".repeat(Math.max(1, Math.round((day.revenue / Math.max(...recent.map((d: any) => d.revenue), 1)) * 10)));
-            response += `${new Date(day.period).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" })} ${bar} ${fmt(day.revenue)} (${day.orders} ped.)\n`;
-          }
-
-          suggestions = ["Comparar com semana anterior", "Top produtos", "Ver pedidos"];
-          data = { period: periodData, prev: prevData, daily: recent };
-          break;
-        }
-
-        // ── ORDERS ──
-        case "orders": {
-          const isPending = /pendente|aguardando|processando|pendentes/i.test(message);
-          const isCancelled = /cancelad/i.test(message);
-          const isDelivered = /entregue|entregues|finalizado/i.test(message);
-
-          const statusFilter = isPending ? ["pending", "processing"]
-            : isCancelled ? ["cancelled"]
-            : isDelivered ? ["delivered"]
-            : null;
-
-          const stats = await getOrdersSummary(tenantId);
-          const recentWhere = statusFilter
-            ? and(eq(orders.tenantId, tenantId), sql`${orders.status} = ANY(ARRAY[${sql.join(statusFilter.map(s => sql`${s}`), sql`, `)}])`)
-            : eq(orders.tenantId, tenantId);
-
-          const recent = await db.query.orders.findMany({
-            where: recentWhere,
-            orderBy: [desc(orders.placedAt)],
-            limit: 10,
-            with: { contact: true },
+          messages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: toolResult,
           });
-
-          const label = isPending ? "Pedidos Pendentes/Em Processamento"
-            : isCancelled ? "Pedidos Cancelados"
-            : isDelivered ? "Pedidos Entregues"
-            : "Pedidos (30d)";
-
-          response = `📦 **${label}**\n\n`;
-          if (!statusFilter) {
-            response += `Total (30d): ${fmtN(stats.total)} | Faturamento: ${fmt(stats.totalRevenue)} | Ticket médio: ${fmt(stats.avgValue)}\n`;
-            response += `Aguardando envio: ${stats.pendingShipment}\n\n`;
-          }
-          response += `**${statusFilter ? `${recent.length} pedido(s) encontrado(s)` : "Últimos pedidos"}:**\n`;
-          for (const o of recent) {
-            const name = o.contact ? `${o.contact.firstName} ${o.contact.lastName}`.trim() : "—";
-            response += `#${o.orderNumber} | ${name} | ${fmt(o.total || 0)} | ${o.status} | ${new Date(o.placedAt).toLocaleDateString("pt-BR")}\n`;
-          }
-          if (statusFilter && recent.length === 0) response += "Nenhum pedido encontrado com esse filtro.\n";
-
-          suggestions = ["Faturamento da semana", "Top produtos", "Visão geral"];
-          data = { stats, recent };
-          break;
         }
 
-        // ── CONTACTS STATS ──
-        case "contacts_stats": {
-          const stats = await getContactsSummary(tenantId);
-          const segDist = await getSegmentDistribution(tenantId);
-
-          response = `👥 **Contatos**\n\n`;
-          response += `Total: ${fmtN(stats.total)} | Novos (mês): ${stats.newThisMonth} | Com pedidos: ${stats.withOrders}\n`;
-          response += `Taxa de recompra: ${stats.repurchaseRate}% | Opt-in WhatsApp: ${stats.optedIn}\n\n`;
-          response += `**Distribuição por segmento:**\n`;
-          for (const seg of segDist) {
-            const label = SEGMENT_LABELS[seg.segment] || seg.segment;
-            const pct = stats.total > 0 ? ((seg.count / stats.total) * 100).toFixed(0) : "0";
-            response += `${label}: ${seg.count} (${pct}%)\n`;
-          }
-
-          suggestions = ["Clientes VIP", "Clientes em risco", "Criar campanha para inativos"];
-          data = { stats, segments: segDist };
-          break;
-        }
-
-        // ── CONTACTS BY SEGMENT ──
-        case "contacts_segment": {
-          const segment = extractSegment(message) || "champions";
-          const result = await db.query.contacts.findMany({
-            where: and(eq(contacts.tenantId, tenantId), eq(contacts.rfmSegment, segment as any)),
-            orderBy: [desc(contacts.totalSpent)],
-            limit: 10,
-          });
-
-          const label = SEGMENT_LABELS[segment] || segment;
-          response = `${label} — ${result.length} contatos\n\n`;
-          for (const c of result) {
-            response += `• **${c.firstName} ${c.lastName}** | ${c.email || ""} | ${fmtN(c.totalOrders || 0)} pedidos | ${fmt(c.totalSpent)}\n`;
-          }
-
-          if (segment === "at_risk" || segment === "cant_lose") {
-            response += `\n💡 Esses clientes precisam de atenção! Quer criar uma campanha de reengajamento?`;
-            actions = [{ type: "suggest_campaign", segment, label: `Campanha para ${label}` }];
-          }
-          if (segment === "champions") {
-            response += `\n💡 Seus melhores clientes! Considere um programa VIP exclusivo.`;
-          }
-
-          suggestions = ["Criar campanha para este segmento", "Ver outros segmentos", "Visão geral"];
-          data = { segment, contacts: result };
-          break;
-        }
-
-        // ── SEARCH CONTACT ──
-        case "search_contact": {
-          const query = extractSearchQuery(message) || message.replace(/buscar|procurar|encontrar|cliente|contato|quem é|informações|sobre|do|da/gi, "").trim();
-          if (!query) {
-            response = "🔍 Por favor, me diga o nome, email ou telefone do contato que está buscando.";
-            break;
-          }
-
-          const result = await db.query.contacts.findMany({
-            where: and(
-              eq(contacts.tenantId, tenantId),
-              or(
-                ilike(contacts.firstName, `%${query}%`),
-                ilike(contacts.lastName, `%${query}%`),
-                ilike(contacts.email, `%${query}%`),
-                ilike(contacts.phone, `%${query}%`),
-              )
-            ),
-            limit: 5,
-            with: { orders: { limit: 3, orderBy: [desc(orders.placedAt)] } },
-          });
-
-          if (result.length === 0) {
-            response = `🔍 Nenhum contato encontrado para "${query}".`;
-          } else {
-            response = `🔍 ${result.length} resultado(s) para "${query}":\n\n`;
-            for (const c of result) {
-              const seg = SEGMENT_LABELS[c.rfmSegment || ""] || c.rfmSegment || "—";
-              response += `**${c.firstName} ${c.lastName}** ${seg}\n`;
-              response += `  📧 ${c.email || "—"} | 📱 ${c.phone || "—"} | 📍 ${c.city || ""}/${c.state || ""}\n`;
-              response += `  💰 ${fmtN(c.totalOrders || 0)} pedidos | ${fmt(c.totalSpent || 0)} gasto | RFM: ${c.rfmScore || "—"}\n`;
-              if (c.orders && c.orders.length > 0) {
-                response += `  Últimos pedidos: ${c.orders.map((o: any) => `#${o.orderNumber} (${fmt(o.total)})`).join(", ")}\n`;
-              }
-              response += `\n`;
-            }
-          }
-
-          suggestions = ["Buscar outro contato", "Ver segmentos", "Visão geral"];
-          data = { query, contacts: result };
-          break;
-        }
-
-        // ── CARTS ──
-        case "carts": {
-          const stats = await getCartsSummary(tenantId);
-          const recent = await db.query.abandonedCarts.findMany({
-            where: and(eq(abandonedCarts.tenantId, tenantId), eq(abandonedCarts.isRecovered, false)),
-            orderBy: [desc(abandonedCarts.abandonedAt)],
-            limit: 5,
-            with: { contact: true },
-          });
-
-          response = `🛒 **Carrinhos Abandonados (30d)**\n\n`;
-          response += `Abandonados: ${stats.abandoned} | Valor perdido: ${fmt(stats.totalValue)}\n`;
-          response += `Recuperados: ${stats.recovered} | Valor recuperado: ${fmt(stats.recoveredValue)}\n`;
-          response += `Taxa de recuperação: ${stats.recoveryRate}%\n\n`;
-
-          if (recent.length > 0) {
-            response += `**Carrinhos pendentes:**\n`;
-            for (const c of recent) {
-              const name = c.contact ? `${c.contact.firstName} ${c.contact.lastName}` : c.email || "Anônimo";
-              const items = (c.items as any[] || []).slice(0, 2).map((i: any) => i.name).join(", ");
-              response += `• ${name} | ${fmt(c.total)} | ${items} | ${c.recoveryAttempts || 0}/3 tentativas\n`;
-            }
-          }
-
-          if (parseFloat(stats.recoveryRate) < 15) {
-            response += `\n💡 Taxa abaixo de 15%. Recomendo disparar recuperação com cupom de desconto.`;
-          }
-
-          suggestions = ["Recuperar carrinhos agora", "Recuperar com cupom VOLTA10", "Ver detalhes de um carrinho"];
-          actions = [{ type: "recover_carts", available: recent.length }];
-          data = { stats, pendingCarts: recent };
-          break;
-        }
-
-        // ── RECOVER ──
-        case "recover": {
-          const couponMatch = message.match(/cupom\s+(\w+)/i) || message.match(/VOLTA\d+/i);
-          const couponCode = couponMatch ? (couponMatch[1] || couponMatch[0]) : undefined;
-
-          const pendingCarts = await db.query.abandonedCarts.findMany({
-            where: and(
-              eq(abandonedCarts.tenantId, tenantId),
-              eq(abandonedCarts.isRecovered, false),
-              lte(abandonedCarts.recoveryAttempts, 2),
-            ),
-            with: { contact: true },
-          });
-
-          if (pendingCarts.length === 0) {
-            response = "✅ Não há carrinhos pendentes para recuperação no momento!";
-            break;
-          }
-
-          // Queue recovery for all pending carts
-          const { Queue } = await import("bullmq");
-          const { redisConnection } = await import("../../lib/redis");
-          const recoveryQueue = new Queue("recovery", { connection: redisConnection });
-
-          let queued = 0;
-          for (const cart of pendingCarts) {
-            if (!cart.contact?.phone) continue;
-            await recoveryQueue.add("recover-cart", {
-              tenantId,
-              cartId: cart.id,
-              contactId: cart.contactId,
-              phone: cart.contact.phone,
-              items: cart.items,
-              total: cart.total,
-              checkoutUrl: cart.checkoutUrl,
-              couponCode,
-            });
-            queued++;
-          }
-
-          response = `✅ **Recuperação disparada!**\n\n`;
-          response += `${queued} mensagens WhatsApp agendadas de ${pendingCarts.length} carrinhos.\n`;
-          if (couponCode) response += `Cupom incluído: **${couponCode}**\n`;
-          response += `\nAs mensagens serão enviadas gradualmente (anti-ban). Acompanhe os resultados em Carrinhos Abandonados.`;
-
-          actions = [{ type: "recovery_dispatched", queued, couponCode }];
-          suggestions = ["Ver status da recuperação", "Criar campanha", "Visão geral"];
-          data = { queued, totalCarts: pendingCarts.length, couponCode };
-          break;
-        }
-
-        // ── CAMPAIGNS LIST ──
-        case "campaigns_list": {
-          const allCampaigns = await db.query.campaigns.findMany({
-            where: eq(campaigns.tenantId, tenantId),
-            orderBy: [desc(campaigns.createdAt)],
-            limit: 10,
-          });
-
-          response = `📢 **Campanhas**\n\n`;
-          if (allCampaigns.length === 0) {
-            response += "Nenhuma campanha criada ainda. Quer criar uma?";
-          } else {
-            for (const c of allCampaigns) {
-              const conv = c.totalSent > 0 ? ((c.totalConverted / c.totalSent) * 100).toFixed(1) : "0";
-              response += `• **${c.name}** [${c.status}] — ${c.channel}\n`;
-              response += `  Enviadas: ${c.totalSent} | Lidas: ${c.totalRead} | Conversão: ${conv}%`;
-              if (parseFloat(String(c.revenue)) > 0) response += ` | Receita: ${fmt(c.revenue)}`;
-              response += `\n`;
-            }
-          }
-
-          suggestions = ["Criar nova campanha", "Disparo rápido para VIPs", "Ver detalhes de uma campanha"];
-          data = { campaigns: allCampaigns };
-          break;
-        }
-
-        // ── CAMPAIGN CREATE ──
-        case "campaign_create":
-        case "campaign_quick": {
-          const segment = extractSegment(message);
-          response = `📢 **Criar Campanha**\n\n`;
-          response += `Para criar uma campanha, preciso de algumas informações:\n\n`;
-          response += `1️⃣ **Nome** da campanha\n`;
-          response += `2️⃣ **Canal**: WhatsApp, Email ou SMS\n`;
-          response += `3️⃣ **Segmento alvo**: ${segment ? SEGMENT_LABELS[segment] || segment : "qual público?"}\n`;
-          response += `4️⃣ **Mensagem** (ou deixe em branco para IA gerar)\n\n`;
-          response += `Exemplo: "Criar campanha Black Friday via WhatsApp para clientes VIP com mensagem Oferta exclusiva!"\n`;
-
-          if (segment) {
-            const count = await db.query.contacts.findMany({
-              where: and(eq(contacts.tenantId, tenantId), eq(contacts.rfmSegment, segment as any)),
-              columns: { id: true },
-            });
-            response += `\n📊 Segmento ${SEGMENT_LABELS[segment]}: ${count.length} contatos disponíveis.`;
-          }
-
-          suggestions = ["Campanha para VIPs", "Campanha para clientes em risco", "Campanha para todos"];
-          break;
-        }
-
-        // ── PRODUCTS ──
-        case "products": {
-          const days = extractDays(message);
-          const topProducts = await db.execute(sql`
-            SELECT
-              item->>'name' as name,
-              item->>'sku' as sku,
-              SUM(COALESCE((item->>'quantity')::numeric, 1)) as total_quantity,
-              SUM(COALESCE(NULLIF(item->>'total', '')::numeric, COALESCE(NULLIF(item->>'price', '')::numeric, 0) * COALESCE((item->>'quantity')::numeric, 1))) as total_revenue
-            FROM orders, jsonb_array_elements(items::jsonb) as item
-            WHERE tenant_id = ${tenantId}
-              AND placed_at >= NOW() - INTERVAL '1 day' * ${days}
-              AND item->>'name' IS NOT NULL
-            GROUP BY item->>'name', item->>'sku'
-            ORDER BY total_revenue DESC
-            LIMIT 10
-          `);
-
-          const products = getRows(topProducts);
-          response = `🏆 **Top Produtos (${days} dias)**\n\n`;
-          if (products.length === 0) {
-            response += "Sem dados de produtos ainda. Conecte uma loja para começar.";
-          } else {
-            for (let i = 0; i < products.length; i++) {
-              const p = products[i] as any;
-              response += `${i + 1}. **${p.name}** — ${fmtN(parseInt(p.total_quantity))} vendidos — ${fmt(p.total_revenue)}\n`;
-            }
-          }
-
-          suggestions = ["Ver faturamento", "Clientes que compraram o top 1", "Visão geral"];
-          data = { products };
-          break;
-        }
-
-        // ── RFM ──
-        case "rfm": {
-          const segDist = await getSegmentDistribution(tenantId);
-          const total = segDist.reduce((s: number, seg: any) => s + seg.count, 0);
-
-          response = `🎯 **Distribuição RFM**\n\n`;
-          for (const seg of segDist) {
-            const label = SEGMENT_LABELS[seg.segment] || seg.segment;
-            const pct = total > 0 ? ((seg.count / total) * 100).toFixed(0) : "0";
-            const bar = "█".repeat(Math.max(1, Math.round(parseFloat(pct) / 5)));
-            response += `${label} ${bar} ${seg.count} (${pct}%) — ${fmt(seg.totalSpent)}\n`;
-          }
-
-          const atRisk = segDist.find((s: any) => s.segment === "at_risk");
-          const lost = segDist.find((s: any) => s.segment === "lost");
-          if (atRisk && atRisk.count > 0) {
-            response += `\n⚠️ ${atRisk.count} clientes em risco. Recomendo campanha de reengajamento!`;
-          }
-          if (lost && lost.count > total * 0.3) {
-            response += `\n🚨 ${((lost.count / total) * 100).toFixed(0)}% dos clientes estão perdidos. Ação urgente necessária.`;
-          }
-
-          suggestions = ["Ver clientes em risco", "Criar campanha de reativação", "Comparar períodos"];
-          data = { segments: segDist, total };
-          break;
-        }
-
-        // ── COMPARE ──
-        case "compare": {
-          const current = await getRevenueForPeriod(tenantId, 7, 0);
-          const previous = await getRevenueForPeriod(tenantId, 14, 7);
-          const revChange = previous.revenue > 0 ? (((current.revenue - previous.revenue) / previous.revenue) * 100).toFixed(1) : "N/A";
-          const ordChange = previous.orders > 0 ? (((current.orders - previous.orders) / previous.orders) * 100).toFixed(1) : "N/A";
-
-          response = `📊 **Comparativo Semanal**\n\n`;
-          response += `| Métrica | Esta semana | Semana anterior | Variação |\n`;
-          response += `|---|---|---|---|\n`;
-          response += `| Faturamento | ${fmt(current.revenue)} | ${fmt(previous.revenue)} | ${revChange}% |\n`;
-          response += `| Pedidos | ${current.orders} | ${previous.orders} | ${ordChange}% |\n`;
-          response += `| Ticket Médio | ${fmt(current.avgValue)} | ${fmt(previous.avgValue)} | — |\n`;
-
-          suggestions = ["Ver faturamento diário", "Top produtos", "Visão geral"];
-          data = { current, previous };
-          break;
-        }
-
-        // ── STORES ──
-        case "stores": {
-          const allStores = await db.query.stores.findMany({
-            where: eq(stores.tenantId, tenantId),
-          });
-
-          response = `🏪 **Lojas Conectadas**\n\n`;
-          if (allStores.length === 0) {
-            response += "Nenhuma loja conectada. Acesse Configurações > Lojas para conectar WooCommerce ou Magento.";
-          } else {
-            for (const s of allStores) {
-              const statusEmoji = s.syncStatus === "synced" ? "✅" : s.syncStatus === "syncing" ? "🔄" : s.syncStatus === "error" ? "❌" : "⏳";
-              response += `${statusEmoji} **${s.name}** (${s.platform})\n`;
-              response += `  URL: ${s.apiUrl} | Status: ${s.syncStatus} | Último sync: ${s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleDateString("pt-BR") : "nunca"}\n`;
-            }
-          }
-
-          suggestions = ["Sincronizar loja", "Ver pedidos", "Visão geral"];
-          data = { stores: allStores };
-          break;
-        }
-
-        // ── SYNC ──
-        case "sync": {
-          const allStores = await db.query.stores.findMany({
-            where: eq(stores.tenantId, tenantId),
-          });
-
-          if (allStores.length === 0) {
-            response = "Nenhuma loja conectada para sincronizar.";
-          } else {
-            const { Queue } = await import("bullmq");
-            const { redisConnection } = await import("../../lib/redis");
-            const syncQueue = new Queue("sync", { connection: redisConnection });
-
-            for (const store of allStores) {
-              await syncQueue.add("sync-store", { storeId: store.id, tenantId, type: "full" });
-            }
-
-            response = `🔄 Sincronização iniciada para ${allStores.length} loja(s).\nIsso pode levar alguns minutos dependendo do volume de dados.`;
-          }
-
-          suggestions = ["Ver status das lojas", "Visão geral"];
-          break;
-        }
-
-        // ── HELP ──
-        case "help": {
-          response = `🤖 **Assistente Sellzin — O que posso fazer:**\n\n`;
-          response += `📊 **"Como estão as vendas?"** — Visão geral completa\n`;
-          response += `💰 **"Faturamento da semana"** — Receita detalhada\n`;
-          response += `👥 **"Quantos clientes novos?"** — Stats de contatos\n`;
-          response += `🏆 **"Clientes VIP"** — Lista campeões/leais\n`;
-          response += `⚠️ **"Clientes em risco"** — Quem precisa de atenção\n`;
-          response += `🔍 **"Buscar Maria Silva"** — Encontrar contato\n`;
-          response += `🛒 **"Carrinhos abandonados"** — Stats de abandono\n`;
-          response += `🚀 **"Recuperar carrinhos"** — Dispara WhatsApp\n`;
-          response += `📢 **"Criar campanha"** — Nova campanha\n`;
-          response += `🏆 **"Top produtos"** — Mais vendidos\n`;
-          response += `🎯 **"Segmentos RFM"** — Distribuição\n`;
-          response += `📊 **"Comparar semanas"** — Evolução\n`;
-          response += `🏪 **"Minhas lojas"** — Status integrações\n`;
-          response += `🔄 **"Sincronizar"** — Atualizar dados\n`;
-          suggestions = ["Como estão as vendas?", "Clientes em risco", "Recuperar carrinhos"];
-          break;
-        }
-
-        // ── UNKNOWN ──
-        default: {
-          response = `Não entendi completamente, mas posso ajudar com:\n\n`;
-          response += `• Vendas e faturamento\n• Contatos e segmentos RFM\n• Pedidos\n• Carrinhos abandonados\n• Campanhas\n• Analytics\n\n`;
-          response += `Tente algo como "como estão as vendas?" ou "recuperar carrinhos".`;
-          suggestions = ["Como estão as vendas?", "Clientes VIP", "Carrinhos abandonados", "Ajuda"];
-        }
+        // Call LLM again with tool results
+        assistantMsg = await callLLMWithTools(messages);
+        messages.push(assistantMsg);
       }
+
+      finalResponse = assistantMsg.content || "Não consegui processar sua pergunta. Tente reformulá-la.";
     } catch (err: any) {
       console.error("[assistant] Error:", err);
-      response = `❌ Erro ao processar: ${err.message}. Tente novamente.`;
-    }
-
-    // Humanize response with LLM (skip for help/unknown intents)
-    if ((OPENAI_API_KEY || GROQ_API_KEY) && intent !== "help" && !response.startsWith("❌")) {
-      try {
-        response = await humanizeWithLLM(response, message, intent);
-      } catch (e) {
-        // Keep raw response on error
-      }
+      finalResponse = `Erro ao processar: ${err.message}. Tente novamente.`;
     }
 
     // Log to assistant_messages
     try {
       const convId = conversationId || `conv_${Date.now()}`;
       await db.insert(assistantMessages).values([
-        { tenantId, conversationId: convId, role: "user", content: message, intent, confidence, channel: "web" },
-        { tenantId, conversationId: convId, role: "assistant", content: response, intent, confidence, channel: "web" },
+        { tenantId, conversationId: convId, role: "user", content: message, intent: "function_call", confidence: 1, channel: "web" },
+        { tenantId, conversationId: convId, role: "assistant", content: finalResponse, intent: "function_call", confidence: 1, channel: "web" },
       ]);
     } catch (e) {}
 
     return {
-      message: response,
-      intent,
-      confidence,
-      data,
-      actions,
-      suggestions,
+      message: finalResponse,
+      intent: "function_call",
+      confidence: 1,
+      suggestions: [],
       timestamp: new Date().toISOString(),
     };
   });
