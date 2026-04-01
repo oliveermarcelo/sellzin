@@ -23,6 +23,7 @@ export default function StoresPage() {
   const [expandScript,  setExpandScript]  = useState<string | null>(null);
   const [liveStats,     setLiveStats]     = useState<any>(null);
   const [productCounts, setProductCounts] = useState<Record<string, number>>({});
+  const [customUrl,     setCustomUrl]     = useState("");
 
   useEffect(() => { loadStores(); loadLiveStats(); }, []);
 
@@ -131,9 +132,8 @@ export default function StoresPage() {
     return <Clock className="w-4 h-4 text-gray-400" />;
   };
 
-  const CRM_ORIGIN = typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.host}`
-    : "";
+  const CRM_ORIGIN = customUrl.trim()
+    || (typeof window !== "undefined" ? `${window.location.protocol}//${window.location.host}` : "");
 
   if (loading) return <Loading />;
 
@@ -235,6 +235,22 @@ export default function StoresPage() {
                 </div>
 
                 {/* Tracking Script Panel */}
+                {scriptOpen && expandScript === store.id && (
+                  <div className="border-t border-gray-100 bg-yellow-50 px-5 py-3 flex items-center gap-3">
+                    <div className="flex-1">
+                      <label className="text-xs font-medium text-gray-700 block mb-1">
+                        URL pública do CRM <span className="text-gray-400 font-normal">(se usar proxy/domínio próprio)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={customUrl}
+                        onChange={e => setCustomUrl(e.target.value)}
+                        placeholder={`Ex: https://efish.com.br (deixe vazio para usar ${typeof window !== "undefined" ? window.location.host : ""})`}
+                        className="w-full text-xs border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      />
+                    </div>
+                  </div>
+                )}
                 {scriptOpen && (
                   <div className="border-t border-gray-100 bg-gray-50 p-5">
                     <div className="flex items-start justify-between mb-3">
