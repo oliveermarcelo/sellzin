@@ -36,7 +36,8 @@ export async function productRoutes(app: FastifyInstance) {
     try {
       if (store.platform === "magento") {
         let hasMore = true;
-        const base = store.apiUrl.replace(/\/$/, "");
+        // Normalize: strip /rest/V1 suffix if user entered full API path
+        const base = store.apiUrl.replace(/\/$/, "").replace(/\/rest\/V1$/, "");
 
         while (hasMore && page <= 20) {
           const url = `${base}/rest/V1/products?searchCriteria[pageSize]=${pageSize}&searchCriteria[currentPage]=${page}&searchCriteria[filter_groups][0][filters][0][field]=status&searchCriteria[filter_groups][0][filters][0][value]=1&searchCriteria[filter_groups][0][filters][0][conditionType]=eq`;
