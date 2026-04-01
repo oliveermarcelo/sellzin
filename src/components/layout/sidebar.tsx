@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import {
   LayoutDashboard, Users, ShoppingCart, Package, BarChart3,
-  Megaphone, Zap, Settings, LogOut, Store, ChevronLeft, Menu, MessageSquare
+  Megaphone, Zap, Settings, LogOut, Store, ChevronLeft, Menu, MessageSquare, Radio
 } from "lucide-react";
 import { useState } from "react";
 import { Logo, LogoIcon } from "@/components/ui/logo";
@@ -18,6 +18,7 @@ const navItems = [
   { href: "/dashboard/campaigns", label: "Campanhas", icon: Megaphone },
   { href: "/dashboard/automations", label: "Automações", icon: Zap },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/dashboard/tracking", label: "Ao Vivo", icon: Radio },
   { href: "/dashboard/assistant", label: "Assistente IA", icon: MessageSquare },
 ];
 
