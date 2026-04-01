@@ -91,10 +91,10 @@ export default function StoresPage() {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const getTrackingScript = (apiKey: string, apiUrl: string) => `<script>
+  const getTrackingScript = (apiKey: string, crmOrigin: string) => `<script>
 (function(){
   var CRM_KEY="${apiKey}";
-  var CRM_URL="${apiUrl}/v1/track";
+  var CRM_URL="${crmOrigin}/api/track";
   var vid=localStorage.getItem("_crm_vid")||("v_"+Math.random().toString(36).slice(2,10));
   localStorage.setItem("_crm_vid",vid);
   function send(evt,data){
@@ -131,8 +131,8 @@ export default function StoresPage() {
     return <Clock className="w-4 h-4 text-gray-400" />;
   };
 
-  const API_URL = typeof window !== "undefined"
-    ? `${window.location.protocol}//${window.location.hostname}:3001`
+  const CRM_ORIGIN = typeof window !== "undefined"
+    ? `${window.location.protocol}//${window.location.host}`
     : "";
 
   if (loading) return <Loading />;
@@ -172,7 +172,7 @@ export default function StoresPage() {
         <div className="space-y-4">
           {stores.map((store: any) => {
             const scriptOpen = expandScript === store.id;
-            const script = getTrackingScript(tenant?.apiKey || "SUA_API_KEY", API_URL);
+            const script = getTrackingScript(tenant?.apiKey || "SUA_API_KEY", CRM_ORIGIN);
             return (
               <div key={store.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                 <div className="p-5">
