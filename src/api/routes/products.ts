@@ -40,7 +40,9 @@ export async function productRoutes(app: FastifyInstance) {
         const base = store.apiUrl.replace(/\/$/, "").replace(/\/rest\/V1$/, "");
 
         while (hasMore && page <= 20) {
-          const url = `${base}/rest/V1/products?searchCriteria[pageSize]=${pageSize}&searchCriteria[currentPage]=${page}&searchCriteria[filter_groups][0][filters][0][field]=status&searchCriteria[filter_groups][0][filters][0][value]=1&searchCriteria[filter_groups][0][filters][0][conditionType]=eq`;
+          // Filter: status=enabled AND visibility in [2,3,4] (Catalog / Search / Catalog+Search)
+          // This excludes child/variation products (visibility=1 = Not Visible Individually)
+          const url = `${base}/rest/V1/products?searchCriteria[pageSize]=${pageSize}&searchCriteria[currentPage]=${page}&searchCriteria[filter_groups][0][filters][0][field]=status&searchCriteria[filter_groups][0][filters][0][value]=1&searchCriteria[filter_groups][0][filters][0][conditionType]=eq&searchCriteria[filter_groups][1][filters][0][field]=visibility&searchCriteria[filter_groups][1][filters][0][value]=2,3,4&searchCriteria[filter_groups][1][filters][0][conditionType]=in`;
           const res = await fetch(url, {
             headers: { Authorization: `Bearer ${store.apiKey}` },
           });
