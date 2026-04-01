@@ -117,7 +117,7 @@ export async function productRoutes(app: FastifyInstance) {
       await db.update(stores)
         .set({ syncStatus: "error", updatedAt: new Date() })
         .where(eq(stores.id, storeId));
-      throw e;
+      return reply.code(400).send({ error: e?.message || "Erro ao sincronizar catálogo" });
     }
   });
 }
