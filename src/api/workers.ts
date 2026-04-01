@@ -354,11 +354,12 @@ async function syncMagento(store: any, tenantId: string) {
   }
 
   // Sync abandoned carts (quotes ativas há mais de 1h)
-  await syncMagentoAbandonedCarts(store, tenantId);
+  await syncMagentoAbandonedCarts(store, tenantId, base);
 }
 
 // ── Helper: Sync Magento Abandoned Carts (quotes) ──
-async function syncMagentoAbandonedCarts(store: any, tenantId: string) {
+async function syncMagentoAbandonedCarts(store: any, tenantId: string, base?: string) {
+  base = base || store.apiUrl.replace(/\/$/, "").replace(/\/rest\/V1$/, "");
   const abandonedThreshold = new Date(Date.now() - 60 * 60 * 1000).toISOString().replace("T", " ").substring(0, 19);
   let page = 1;
   const pageSize = 100;
