@@ -342,15 +342,17 @@ async function executeTool(name: string, args: any, tenantId: string): Promise<s
       case "get_tracking_stats": {
         const result = await db.execute(sql`
           SELECT
-            COUNT(*) as total_events,
-            COUNT(DISTINCT session_id) as total_sessions,
-            COUNT(DISTINCT visitor_id) as total_visitors,
-            COUNT(CASE WHEN event_type = 'pageview' THEN 1 END) as pageviews,
-            COUNT(CASE WHEN created_at >= NOW() - INTERVAL '24 hours' THEN 1 END) as last_24h
+            COUNT(DISTINCT CASE WHEN created_at > NOW() - INTERVAL '10 minutes' THEN visitor_id END) as live_now,
+            COUNT(DISTINCT CASE WHEN created_at > NOW() - INTERVAL '24 hours' THEN visitor_id END) as unique_visitors_24h,
+            COUNT(CASE WHEN created_at > NOW() - INTERVAL '24 hours' AND event = 'active_on_site' THEN 1 END) as page_views_24h,
+            COUNT(CASE WHEN created_at > NOW() - INTERVAL '24 hours' AND event = 'viewed_product' THEN 1 END) as product_views_24h,
+            COUNT(CASE WHEN created_at > NOW() - INTERVAL '24 hours' AND event = 'added_to_cart' THEN 1 END) as cart_events_24h,
+            COUNT(DISTINCT visitor_id) as total_visitors_7d
           FROM tracking_events
           WHERE tenant_id = ${tenantId}
+            AND created_at > NOW() - INTERVAL '7 days'
         `);
-        return JSON.stringify(getRows(result)[0] || {});
+        return JSON.stringify(getRows(result)[0] || { live_now: 0, unique_visitors_24h: 0, page_views_24h: 0, product_views_24h: 0, cart_events_24h: 0 });
       }
 
       default:
