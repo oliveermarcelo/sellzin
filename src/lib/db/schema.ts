@@ -243,6 +243,56 @@ export const abandonedCarts = pgTable(
   })
 );
 
+// ── Products (Catálogo sincronizado) ──
+
+export const products = pgTable(
+  "products",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    storeId: uuid("store_id").notNull().references(() => stores.id, { onDelete: "cascade" }),
+    externalId: varchar("external_id", { length: 255 }).notNull(),
+    sku: varchar("sku", { length: 255 }),
+    name: varchar("name", { length: 500 }).notNull(),
+    price: decimal("price", { precision: 12, scale: 2 }).default("0"),
+    imageUrl: text("image_url"),
+    url: text("url"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantIdx: index("products_tenant_idx").on(table.tenantId),
+    storeExternalIdx: uniqueIndex("products_store_external_idx").on(table.storeId, table.externalId),
+  })
+);
+
+// ── Tracking Events (Web tracking) ──
+
+export const trackingEvents = pgTable(
+  "tracking_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    visitorId: varchar("visitor_id", { length: 100 }).notNull(),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    event: varchar("event", { length: 50 }).notNull(), // active_on_site | viewed_product | added_to_cart | identify
+    productSku: varchar("product_sku", { length: 255 }),
+    productName: varchar("product_name", { length: 500 }),
+    productPrice: decimal("product_price", { precision: 12, scale: 2 }),
+    url: text("url"),
+    email: varchar("email", { length: 255 }),
+    phone: varchar("phone", { length: 50 }),
+    metadata: jsonb("metadata").default({}),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantIdx: index("tracking_tenant_idx").on(table.tenantId),
+    visitorIdx: index("tracking_visitor_idx").on(table.visitorId),
+    createdAtIdx: index("tracking_created_at_idx").on(table.tenantId, table.createdAt),
+  })
+);
+
 // ── Automations (Fluxos) ──
 
 export const automations = pgTable(
@@ -466,4 +516,14 @@ export const interactionsRelations = relations(interactions, ({ one }) => ({
 
 export const assistantMessagesRelations = relations(assistantMessages, ({ one }) => ({
   tenant: one(tenants, { fields: [assistantMessages.tenantId], references: [tenants.id] }),
+}));
+
+export const productsRelations = relations(products, ({ one }) => ({
+  tenant: one(tenants, { fields: [products.tenantId], references: [tenants.id] }),
+  store: one(stores, { fields: [products.storeId], references: [stores.id] }),
+}));
+
+export const trackingEventsRelations = relations(trackingEvents, ({ one }) => ({
+  tenant: one(tenants, { fields: [trackingEvents.tenantId], references: [tenants.id] }),
+  contact: one(contacts, { fields: [trackingEvents.contactId], references: [contacts.id] }),
 }));

@@ -139,6 +139,15 @@ class ApiClient {
   }
   getComparison() { return this.request("/analytics/compare"); }
 
+  // Products
+  getProducts() { return this.request("/products"); }
+  syncProducts(storeId: string) { return this.request(`/products/sync/${storeId}`, { method: "POST", body: {} }); }
+
+  // Tracking
+  getLiveVisitors() { return this.request("/track/live"); }
+  getTrackingEvents(event?: string) { return this.request(`/track/events${event ? "?event=" + event : ""}`); }
+  getTrackingStats() { return this.request("/track/stats"); }
+
   getOrdersByStatus(params?: Record<string, string>) { return this.request("/analytics/orders-by-status" + (params ? "?" + new URLSearchParams(params) : "")); }
   getWeekdayActivity(params?: Record<string, string>) { return this.request("/analytics/weekday" + (params ? "?" + new URLSearchParams(params) : "")); }
   getCustomers(group?: string, params?: Record<string, string>) {
