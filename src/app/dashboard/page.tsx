@@ -61,21 +61,43 @@ export default function DashboardPage() {
             <div><h3 className="text-sm font-semibold text-gray-900">Faturamento</h3><p className="text-xs text-gray-400">Últimos 90 dias</p></div>
             <Link href="/dashboard/analytics" className="text-xs text-red-600 hover:text-red-500 flex items-center gap-1">Ver detalhes <ArrowUpRight className="w-3 h-3" /></Link>
           </div>
-          {revenueData.length > 0 ? (
-            <div className="h-48 flex items-end gap-[2px]">
-              {revenueData.slice(-30).map((d: any, i: number) => {
-                const height = maxRevenue > 0 ? (parseFloat(d.revenue) / maxRevenue) * 100 : 0;
-                return (
-                  <div key={i} className="flex-1 min-w-0 group relative h-full flex items-end">
-                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none z-10">
-                      {formatCurrency(d.revenue)}<br />{new Date(d.period).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
-                    </div>
-                    <div className="w-full rounded-sm bg-red-500/70 hover:bg-red-500 transition-all cursor-pointer" style={{ height: `${Math.max(height, 2)}%` }} />
-                  </div>
-                );
-              })}
-            </div>
-          ) : (<div className="h-48 flex items-center justify-center text-gray-300 text-sm">Sem dados ainda</div>)}
+          {revenueData.length > 0 ? (() => {
+            const slice = revenueData.slice(-30);
+            const maxRev = Math.max(...slice.map((d: any) => parseFloat(d.revenue) || 0), 1);
+            const maxOrd = Math.max(...slice.map((d: any) => parseInt(d.orders) || 0), 1);
+            const ordPts = slice.map((d: any, i: number) => {
+              const x = slice.length > 1 ? (i / (slice.length - 1)) * 100 : 50;
+              const y = 100 - ((parseInt(d.orders) || 0) / maxOrd) * 82 - 5;
+              return `${x},${y}`;
+            }).join(" ");
+            return (
+              <div className="h-48 relative">
+                <div className="absolute inset-0 flex items-end gap-[2px]">
+                  {slice.map((d: any, i: number) => {
+                    const height = maxRev > 0 ? (parseFloat(d.revenue) / maxRev) * 100 : 0;
+                    return (
+                      <div key={i} className="flex-1 min-w-0 group relative h-full flex items-end">
+                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none z-10">
+                          {formatCurrency(d.revenue)}<br />{parseInt(d.orders)} pedidos
+                        </div>
+                        <div className="w-full rounded-sm bg-red-500/70 hover:bg-red-500 transition-all cursor-pointer"
+                          style={{ height: `${Math.max(height, 2)}%` }} />
+                      </div>
+                    );
+                  })}
+                </div>
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none"
+                  className="absolute inset-0 w-full h-full pointer-events-none">
+                  <polyline points={ordPts} fill="none" stroke="#6366f1" strokeWidth="2"
+                    vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+            );
+          })() : (<div className="h-48 flex items-center justify-center text-gray-300 text-sm">Sem dados ainda</div>)}
+          <div className="flex items-center gap-4 mt-2">
+            <span className="flex items-center gap-1.5 text-[10px] text-gray-400"><span className="w-3 h-2 rounded-sm bg-red-500/70 inline-block" /> Faturamento</span>
+            <span className="flex items-center gap-1.5 text-[10px] text-gray-400"><span className="w-4 h-px bg-indigo-500 inline-block" /> Pedidos</span>
+          </div>
         </div>
 
         <div className="bg-white border border-gray-200 rounded-xl p-5">

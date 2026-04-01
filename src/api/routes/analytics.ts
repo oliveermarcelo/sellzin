@@ -134,6 +134,75 @@ export async function analyticsRoutes(app: FastifyInstance) {
     return { data: result };
   });
 
+  // ── Orders by status ──
+  app.get("/orders-by-status", async (request) => {
+    const { tenantId } = request.user as any;
+    const query = request.query as any;
+
+    const dateCondition = query.startDate && query.endDate
+      ? sql`${orders.placedAt} >= ${query.startDate}::date AND ${orders.placedAt} < (${query.endDate}::date + INTERVAL '1 day')`
+      : sql`${orders.placedAt} > NOW() - INTERVAL '30 days'`;
+
+    const result = await db
+      .select({
+        status: orders.status,
+        count: count(),
+        revenue: sql<string>`COALESCE(SUM(${orders.total}::numeric), 0)`,
+      })
+      .from(orders)
+      .where(and(eq(orders.tenantId, tenantId), dateCondition))
+      .groupBy(orders.status);
+
+    return { statuses: result };
+  });
+
+  // ── Activity by day of week ──
+  app.get("/weekday", async (request) => {
+    const { tenantId } = request.user as any;
+    const query = request.query as any;
+
+    const dateCondition = query.startDate && query.endDate
+      ? sql`placed_at >= ${query.startDate}::date AND placed_at < (${query.endDate}::date + INTERVAL '1 day')`
+      : sql`placed_at > NOW() - INTERVAL '90 days'`;
+
+    const result = await db.execute(sql`
+      SELECT
+        EXTRACT(DOW FROM placed_at)::int AS day,
+        COUNT(*) AS orders,
+        COALESCE(SUM(total::numeric), 0) AS revenue
+      FROM orders
+      WHERE tenant_id = ${tenantId} AND ${dateCondition}
+      GROUP BY EXTRACT(DOW FROM placed_at)
+      ORDER BY day ASC
+    `);
+
+    return { weekdays: result };
+  });
+
+  // ── New customers over time ──
+  app.get("/customers", async (request) => {
+    const { tenantId } = request.user as any;
+    const query = request.query as any;
+    const groupBy = query.group || "day";
+    const interval = groupBy === "month" ? "month" : groupBy === "week" ? "week" : "day";
+
+    const dateCondition = query.startDate && query.endDate
+      ? sql`created_at >= ${query.startDate}::date AND created_at < (${query.endDate}::date + INTERVAL '1 day')`
+      : sql`created_at > NOW() - INTERVAL '90 days'`;
+
+    const result = await db.execute(sql`
+      SELECT
+        DATE_TRUNC(${sql.raw(`'${interval}'`)}, created_at) AS period,
+        COUNT(*) AS new_customers
+      FROM contacts
+      WHERE tenant_id = ${tenantId} AND ${dateCondition}
+      GROUP BY DATE_TRUNC(${sql.raw(`'${interval}'`)}, created_at)
+      ORDER BY period ASC
+    `);
+
+    return { data: result };
+  });
+
   // ── Compare periods ──
   app.get("/compare", async (request) => {
     const { tenantId } = request.user as any;

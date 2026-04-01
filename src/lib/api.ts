@@ -139,6 +139,13 @@ class ApiClient {
   }
   getComparison() { return this.request("/analytics/compare"); }
 
+  getOrdersByStatus(params?: Record<string, string>) { return this.request("/analytics/orders-by-status" + (params ? "?" + new URLSearchParams(params) : "")); }
+  getWeekdayActivity(params?: Record<string, string>) { return this.request("/analytics/weekday" + (params ? "?" + new URLSearchParams(params) : "")); }
+  getCustomers(group?: string, params?: Record<string, string>) {
+    const p = new URLSearchParams({ ...(group ? { group } : {}), ...(params || {}) });
+    return this.request("/analytics/customers?" + p);
+  }
+
   // Automations
   getAutomations() { return this.request("/automations"); }
   createAutomation(data: any) { return this.request("/automations", { method: "POST", body: data }); }
