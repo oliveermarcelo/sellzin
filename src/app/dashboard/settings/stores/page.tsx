@@ -117,6 +117,18 @@ export default function StoresPage() {
   },true);
   // Identify logged-in customer (Magento 2)
   try{require(["Magento_Customer/js/model/customer"],function(c){if(c.isLoggedIn&&c.isLoggedIn()){var d=c.customerData;if(d&&d.email)send("identify",{email:d.email});}});}catch(e){}
+  // Capture email on checkout (Magento 2 + WooCommerce) — works with SPA via MutationObserver
+  function attachEmailCapture(){
+    var sel="#customer-email,input[name='username'],#billing_email,.input-text[autocomplete='email'],input[type='email']";
+    document.querySelectorAll(sel).forEach(function(el){
+      if(el._crmBound)return;el._crmBound=true;
+      if(el.value&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(el.value.trim()))send("identify",{email:el.value.trim()});
+      el.addEventListener("blur",function(){var v=this.value.trim();if(v&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))send("identify",{email:v});});
+    });
+  }
+  attachEmailCapture();
+  var _crmObs=new MutationObserver(function(){attachEmailCapture();});
+  _crmObs.observe(document.body,{childList:true,subtree:true});
   // WooCommerce add to cart
   document.addEventListener("click",function(e){
     var btn=e.target.closest(".add_to_cart_button,.single_add_to_cart_button");

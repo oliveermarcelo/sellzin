@@ -34,6 +34,18 @@ export async function trackingRoutes(app: FastifyInstance) {
         where: and(eq(contacts.tenantId, tenant.id), or(...conditions)),
       });
       contactId = contact?.id || null;
+
+      // On "identify" event: retroactively link all previous events from this visitor
+      if (event === "identify" && contactId) {
+        await db.execute(sql`
+          UPDATE tracking_events
+          SET contact_id = ${contactId}
+          WHERE tenant_id = ${tenant.id}
+            AND visitor_id = ${visitorId}
+            AND contact_id IS NULL
+        `);
+        return reply.code(200).send({ ok: true, identified: true });
+      }
     }
 
     await db.insert(trackingEvents).values({
