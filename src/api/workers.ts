@@ -316,11 +316,12 @@ async function syncWooCommerce(store: any, tenantId: string) {
 async function syncMagento(store: any, tenantId: string) {
   let page = 1;
   const pageSize = 100;
+  const base = store.apiUrl.replace(/\/$/, "").replace(/\/rest\/V1$/, "");
 
   while (true) {
-    const url = `${store.apiUrl}/orders?searchCriteria[pageSize]=${pageSize}&searchCriteria[currentPage]=${page}`;
+    const url = `${base}/rest/V1/orders?searchCriteria[pageSize]=${pageSize}&searchCriteria[currentPage]=${page}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${store.apiKey}` } });
-    if (!res.ok) throw new Error(`Magento API error: ${res.status}`);
+    if (!res.ok) throw new Error(`Magento API error ${res.status}: ${await res.text().then(t => t.slice(0,200))}`);
 
     const data = await res.json();
     const magentoOrders = data.items || [];
@@ -378,7 +379,7 @@ async function syncMagentoAbandonedCarts(store: any, tenantId: string) {
       "searchCriteria[currentPage]": String(page),
     });
 
-    const url = `${store.apiUrl}/carts/search?${params}`;
+    const url = `${base}/rest/V1/carts/search?${params}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${store.apiKey}` } });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
