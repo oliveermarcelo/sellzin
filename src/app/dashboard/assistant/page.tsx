@@ -52,7 +52,13 @@ export default function AssistantPage() {
 
   useEffect(() => {
     api.assistantSuggestions().then((data: any) => {
-      if (data.suggestions) setSuggestions(data.suggestions);
+      if (data.suggestions?.length) {
+        setSuggestions(data.suggestions.map((s: any) =>
+          typeof s === "string"
+            ? { icon: s.match(/^[\p{Emoji}]/u)?.[0] || "💡", text: s.replace(/^[\p{Emoji}\s]+/u, ""), action: s, prompt: s }
+            : s
+        ));
+      }
     }).catch(() => {});
   }, []);
 
