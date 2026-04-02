@@ -17,6 +17,7 @@ import { adminRoutes } from "./routes/admin";
 import { automationRoutes } from "./routes/automations";
 import { productRoutes } from "./routes/products";
 import { trackingRoutes } from "./routes/tracking";
+import { competitorRoutes } from "./routes/competitors";
 
 const PORT = parseInt(process.env.API_PORT || "3001");
 
@@ -82,7 +83,8 @@ async function buildServer() {
   await app.register(adminRoutes, { prefix: "/v1/admin" });
   await app.register(automationRoutes, { prefix: "/v1/automations" });
   await app.register(productRoutes,    { prefix: "/v1/products" });
-  await app.register(trackingRoutes,   { prefix: "/v1/track" });
+  await app.register(trackingRoutes,    { prefix: "/v1/track" });
+  await app.register(competitorRoutes,  { prefix: "/v1/competitors" });
   await app.register(assistantRoutes, { prefix: "/v1" });
 
   return app;

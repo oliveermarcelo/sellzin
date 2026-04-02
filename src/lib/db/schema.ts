@@ -527,3 +527,34 @@ export const trackingEventsRelations = relations(trackingEvents, ({ one }) => ({
   tenant: one(tenants, { fields: [trackingEvents.tenantId], references: [tenants.id] }),
   contact: one(contacts, { fields: [trackingEvents.contactId], references: [contacts.id] }),
 }));
+
+// ── Price Comparisons (Google Shopping via SerpAPI) ──
+
+export const priceComparisons = pgTable(
+  "price_comparisons",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    productId: uuid("product_id").references(() => products.id, { onDelete: "cascade" }),
+    productName: varchar("product_name", { length: 500 }).notNull(),
+    productSku: varchar("product_sku", { length: 255 }),
+    ourPrice: decimal("our_price", { precision: 12, scale: 2 }),
+    competitors: jsonb("competitors").default([]), // [{store, price, link, position}]
+    lowestPrice: decimal("lowest_price", { precision: 12, scale: 2 }),
+    lowestStore: varchar("lowest_store", { length: 255 }),
+    priceDiff: decimal("price_diff", { precision: 8, scale: 2 }), // % difference vs lowest
+    searchQuery: varchar("search_query", { length: 500 }),
+    scannedAt: timestamp("scanned_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => ({
+    tenantIdx: index("price_comp_tenant_idx").on(table.tenantId),
+    productIdx: index("price_comp_product_idx").on(table.productId),
+    scannedIdx: index("price_comp_scanned_idx").on(table.tenantId, table.scannedAt),
+  })
+);
+
+export const priceComparisonsRelations = relations(priceComparisons, ({ one }) => ({
+  tenant: one(tenants, { fields: [priceComparisons.tenantId], references: [tenants.id] }),
+  product: one(products, { fields: [priceComparisons.productId], references: [products.id] }),
+}));

@@ -148,6 +148,12 @@ class ApiClient {
   getTrackingEvents(event?: string) { return this.request(`/track/events${event ? "?event=" + event : ""}`); }
   getTrackingStats() { return this.request("/track/stats"); }
 
+  // Competitors
+  getCompetitors(limit?: number) { return this.request(`/competitors${limit ? "?limit=" + limit : ""}`); }
+  scanCompetitor(productId?: string, query?: string) { return this.request("/competitors/scan", "POST", { productId, query }); }
+  scanAllCompetitors(limit?: number) { return this.request("/competitors/scan-all", "POST", { limit: limit || 20 }); }
+  getCompetitorHistory(productId: string) { return this.request(`/competitors/history/${productId}`); }
+
   getOrdersByStatus(params?: Record<string, string>) { return this.request("/analytics/orders-by-status" + (params ? "?" + new URLSearchParams(params) : "")); }
   getWeekdayActivity(params?: Record<string, string>) { return this.request("/analytics/weekday" + (params ? "?" + new URLSearchParams(params) : "")); }
   getCustomers(group?: string, params?: Record<string, string>) {
