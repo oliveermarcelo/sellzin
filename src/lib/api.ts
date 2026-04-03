@@ -150,8 +150,8 @@ class ApiClient {
 
   // Competitors
   getCompetitors(limit?: number) { return this.request(`/competitors${limit ? "?limit=" + limit : ""}`); }
-  scanCompetitor(productId?: string, query?: string) { return this.request("/competitors/scan", "POST", { productId, query }); }
-  scanAllCompetitors(limit?: number) { return this.request("/competitors/scan-all", "POST", { limit: limit || 20 }); }
+  scanCompetitor(productId?: string, query?: string) { return this.request("/competitors/scan", { method: "POST", body: { productId, query } }); }
+  scanAllCompetitors(limit?: number) { return this.request("/competitors/scan-all", { method: "POST", body: { limit: limit || 20 } }); }
   getCompetitorHistory(productId: string) { return this.request(`/competitors/history/${productId}`); }
 
   getOrdersByStatus(params?: Record<string, string>) { return this.request("/analytics/orders-by-status" + (params ? "?" + new URLSearchParams(params) : "")); }
