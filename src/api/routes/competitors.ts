@@ -92,6 +92,12 @@ export async function competitorRoutes(app: FastifyInstance) {
     const searchQuery = customQuery || product?.name;
     if (!searchQuery) return reply.code(400).send({ error: "Informe productId ou query" });
 
+    // Block combos/kits
+    const COMBO_WORDS = /\b(combo|kit|conjunto|pacote|pack|bundle)\b/i;
+    if (COMBO_WORDS.test(searchQuery)) {
+      return reply.code(400).send({ error: "Produtos do tipo Combo/Kit não são monitorados pois são muito específicos para comparação de preço." });
+    }
+
     // If no product linked, try to find it in catalog by name
     if (!product && customQuery) {
       product = await db.query.products.findFirst({
@@ -176,11 +182,17 @@ export async function competitorRoutes(app: FastifyInstance) {
 
     if (!SERPAPI_KEY) return reply.code(400).send({ error: "SERPAPI_KEY não configurada. Adicione ao .env na VPS." });
 
-    const prods = await db.query.products.findMany({
+    const COMBO_WORDS = /\b(combo|kit|conjunto|pacote|pack|bundle)\b/i;
+
+    const allProds = await db.query.products.findMany({
       where: and(eq(products.tenantId, tenantId), eq(products.isActive, true)),
-      limit: parseInt(limit),
       orderBy: [desc(products.updatedAt)],
     });
+
+    // Exclude combos/kits
+    const prods = allProds
+      .filter((p: any) => !COMBO_WORDS.test(p.name))
+      .slice(0, parseInt(limit));
 
     let scanned = 0;
     let errors = 0;
