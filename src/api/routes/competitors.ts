@@ -2,7 +2,7 @@
 import { FastifyInstance } from "fastify";
 import { db } from "../../lib/db";
 import { products, priceComparisons } from "../../lib/db/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, ilike } from "drizzle-orm";
 
 const SERPAPI_KEY = process.env.SERPAPI_KEY || "";
 
@@ -89,6 +89,16 @@ export async function competitorRoutes(app: FastifyInstance) {
 
     const searchQuery = customQuery || product?.name;
     if (!searchQuery) return reply.code(400).send({ error: "Informe productId ou query" });
+
+    // If no product linked, try to find it in catalog by name
+    if (!product && customQuery) {
+      product = await db.query.products.findFirst({
+        where: and(
+          eq(products.tenantId, tenantId),
+          ilike(products.name, `%${customQuery.trim()}%`),
+        ),
+      });
+    }
 
     const results = await searchGoogleShopping(searchQuery);
 
