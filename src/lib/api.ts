@@ -153,6 +153,7 @@ class ApiClient {
   scanCompetitor(productId?: string, query?: string) { return this.request("/competitors/scan", { method: "POST", body: { productId, query } }); }
   scanAllCompetitors(limit?: number) { return this.request("/competitors/scan-all", { method: "POST", body: { limit: limit || 20 } }); }
   getCompetitorHistory(productId: string) { return this.request(`/competitors/history/${productId}`); }
+  clearCompetitors() { return this.request("/competitors/clear", { method: "DELETE" }); }
 
   getOrdersByStatus(params?: Record<string, string>) { return this.request("/analytics/orders-by-status" + (params ? "?" + new URLSearchParams(params) : "")); }
   getWeekdayActivity(params?: Record<string, string>) { return this.request("/analytics/weekday" + (params ? "?" + new URLSearchParams(params) : "")); }

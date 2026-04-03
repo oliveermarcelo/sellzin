@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import {
   TrendingDown, TrendingUp, Minus, Search, RefreshCw,
   ExternalLink, AlertTriangle, CheckCircle, Clock, BarChart3,
-  ChevronDown, ChevronUp, Package, Zap
+  ChevronDown, ChevronUp, Package, Zap, Trash2
 } from "lucide-react";
 
 function fmt(n: any) {
@@ -196,6 +196,18 @@ export default function CompetitorsPage() {
           <button onClick={load} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
             <RefreshCw className="w-3.5 h-3.5" /> Atualizar
           </button>
+          {comparisons.length > 0 && (
+            <button
+              onClick={async () => {
+                if (!confirm("Limpar toda a lista de monitoramento?")) return;
+                await api.clearCompetitors();
+                await load();
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-red-200 text-red-600 hover:bg-red-50 transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Limpar lista
+            </button>
+          )}
           <button
             onClick={scanAll}
             disabled={scanning}

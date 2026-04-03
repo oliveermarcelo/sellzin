@@ -267,4 +267,11 @@ export async function competitorRoutes(app: FastifyInstance) {
 
     return { history };
   });
+
+  // ── DELETE /v1/competitors/clear — apaga todas as comparações do tenant ──
+  app.delete("/clear", async (req) => {
+    const { tenantId } = req.user as any;
+    await db.delete(priceComparisons).where(eq(priceComparisons.tenantId, tenantId));
+    return { ok: true };
+  });
 }
