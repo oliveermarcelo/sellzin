@@ -59,9 +59,11 @@ export async function competitorRoutes(app: FastifyInstance) {
     const results = Array.isArray(rows) ? rows : (rows as any).rows || [];
 
     // Summary stats
-    const cheaper = results.filter((r: any) => parseFloat(r.price_diff || 0) > 0).length;
-    const moreExpensive = results.filter((r: any) => parseFloat(r.price_diff || 0) < 0).length;
-    const equal = results.filter((r: any) => parseFloat(r.price_diff || 0) === 0).length;
+    // price_diff > 0 = our price is HIGHER than competitor = more expensive
+    // price_diff < 0 = our price is LOWER than competitor = cheaper
+    const cheaper = results.filter((r: any) => parseFloat(r.price_diff || 0) < -2).length;
+    const moreExpensive = results.filter((r: any) => parseFloat(r.price_diff || 0) > 2).length;
+    const equal = results.filter((r: any) => Math.abs(parseFloat(r.price_diff || 0)) <= 2).length;
 
     return {
       comparisons: results,
@@ -102,8 +104,23 @@ export async function competitorRoutes(app: FastifyInstance) {
 
     const results = await searchGoogleShopping(searchQuery);
 
-    // Parse competitor prices
-    const competitors = results.slice(0, 10).map((r: any) => ({
+    // Filter results to only include products that match our product name
+    // Use word overlap: at least 40% of significant words must match
+    function titleMatchScore(productName: string, resultTitle: string): number {
+      const stopWords = new Set(["de", "do", "da", "e", "com", "para", "em", "o", "a", "+"]);
+      const normalize = (s: string) => s.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
+        .filter(w => w.length > 2 && !stopWords.has(w));
+      const nameWords = normalize(productName);
+      const titleWords = normalize(resultTitle);
+      if (!nameWords.length) return 0;
+      const matches = nameWords.filter(w => titleWords.some(t => t.includes(w) || w.includes(t)));
+      return matches.length / nameWords.length;
+    }
+
+    const productNameForMatch = product?.name || searchQuery;
+    const allCompetitors = results.map((r: any) => ({
       store: r.source || r.seller || "Desconhecido",
       price: parseBRPrice(r.price),
       priceStr: r.price,
@@ -111,7 +128,14 @@ export async function competitorRoutes(app: FastifyInstance) {
       title: r.title,
       position: r.position,
       thumbnail: r.thumbnail,
+      matchScore: titleMatchScore(productNameForMatch, r.title || ""),
     })).filter((c: any) => c.price !== null);
+
+    // Only keep results with at least 30% word match
+    const competitors = allCompetitors
+      .filter((c: any) => c.matchScore >= 0.3)
+      .sort((a: any, b: any) => b.matchScore - a.matchScore)
+      .slice(0, 10);
 
     const ourPrice = product?.price ? parseFloat(product.price) : null;
 
@@ -121,7 +145,10 @@ export async function competitorRoutes(app: FastifyInstance) {
     const lowestPrice = lowest?.price ?? null;
     const lowestStore = lowest?.store ?? null;
 
-    // Price diff: positive = we are cheaper, negative = we are more expensive
+    // Price diff: negative = we are cheaper than lowest, positive = we are more expensive
+    // Formula: (ourPrice - lowestPrice) / lowestPrice * 100
+    // +10% = we are 10% MORE EXPENSIVE than competitor
+    // -10% = we are 10% CHEAPER than competitor
     const priceDiff = ourPrice && lowestPrice
       ? (((ourPrice - lowestPrice) / lowestPrice) * 100)
       : null;
@@ -161,19 +188,39 @@ export async function competitorRoutes(app: FastifyInstance) {
     for (const product of prods) {
       try {
         const results = await searchGoogleShopping(product.name);
-        const competitors = results.slice(0, 10).map((r: any) => ({
-          store: r.source || r.seller || "Desconhecido",
-          price: parseBRPrice(r.price),
-          priceStr: r.price,
-          link: r.link || r.product_link,
-          title: r.title,
-          position: r.position,
-          thumbnail: r.thumbnail,
-        })).filter((c: any) => c.price !== null);
+
+        function titleMatchScore2(productName: string, resultTitle: string): number {
+          const stopWords = new Set(["de", "do", "da", "e", "com", "para", "em", "o", "a", "+"]);
+          const normalize = (s: string) => s.toLowerCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
+            .filter(w => w.length > 2 && !stopWords.has(w));
+          const nameWords = normalize(productName);
+          const titleWords = normalize(resultTitle);
+          if (!nameWords.length) return 0;
+          const matches = nameWords.filter(w => titleWords.some(t => t.includes(w) || w.includes(t)));
+          return matches.length / nameWords.length;
+        }
+
+        const competitors = results
+          .map((r: any) => ({
+            store: r.source || r.seller || "Desconhecido",
+            price: parseBRPrice(r.price),
+            priceStr: r.price,
+            link: r.link || r.product_link,
+            title: r.title,
+            position: r.position,
+            thumbnail: r.thumbnail,
+            matchScore: titleMatchScore2(product.name, r.title || ""),
+          }))
+          .filter((c: any) => c.price !== null && c.matchScore >= 0.3)
+          .sort((a: any, b: any) => b.matchScore - a.matchScore)
+          .slice(0, 10);
 
         const ourPrice = product.price ? parseFloat(product.price) : null;
         const sorted = [...competitors].sort((a, b) => a.price - b.price);
         const lowest = sorted[0];
+        // positive = more expensive than competitor, negative = cheaper
         const priceDiff = ourPrice && lowest?.price
           ? (((ourPrice - lowest.price) / lowest.price) * 100)
           : null;

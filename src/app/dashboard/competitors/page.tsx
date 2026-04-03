@@ -17,14 +17,16 @@ function fmt(n: any) {
 function PriceDiffBadge({ diff }: { diff: number | null }) {
   if (diff === null) return <span className="text-gray-400 text-xs">—</span>;
   const d = parseFloat(String(diff));
+  // price_diff > 0 = our price is higher = more expensive
+  // price_diff < 0 = our price is lower = cheaper
   if (d > 2) return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
-      <TrendingDown className="w-3 h-3" /> {d.toFixed(1)}% mais barato
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+      <TrendingUp className="w-3 h-3" /> {d.toFixed(1)}% mais caro
     </span>
   );
   if (d < -2) return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
-      <TrendingUp className="w-3 h-3" /> {Math.abs(d).toFixed(1)}% mais caro
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+      <TrendingDown className="w-3 h-3" /> {Math.abs(d).toFixed(1)}% mais barato
     </span>
   );
   return (
@@ -165,8 +167,8 @@ export default function CompetitorsPage() {
 
   const filtered = comparisons.filter(c => {
     const diff = parseFloat(c.price_diff ?? c.priceDiff ?? "0");
-    if (filter === "cheaper") return diff > 2;
-    if (filter === "expensive") return diff < -2;
+    if (filter === "cheaper") return diff < -2;       // nossa price é menor
+    if (filter === "expensive") return diff > 2;      // nosso preço é maior
     return true;
   });
 
