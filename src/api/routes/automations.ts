@@ -1,9 +1,9 @@
 // @ts-nocheck
 import { FastifyInstance } from "fastify";
 import { db } from "../../lib/db";
-import { automations, automationRuns, contacts } from "../../lib/db/schema";
+import { automations, contacts } from "../../lib/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { triggerAutomations } from "../services/trigger";
+import { queueAutomationRun } from "../services/trigger";
 
 export async function automationRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
@@ -123,7 +123,7 @@ export async function automationRoutes(app: FastifyInstance) {
   app.post("/:id/run", async (req, reply) => {
     const { tenantId } = req.user as any;
     const { id } = req.params as any;
-    const { contactId, phone: directPhone, name: directName } = req.body as any;
+    const { contactId, phone: directPhone, name: directName, skipWaits = true } = req.body as any;
 
     const automation = await db.query.automations.findFirst({
       where: and(eq(automations.id, id), eq(automations.tenantId, tenantId)),
@@ -145,8 +145,8 @@ export async function automationRoutes(app: FastifyInstance) {
       }
     }
 
-    await triggerAutomations(tenantId, automation.trigger, contactId || null, phone, ctx);
-    return { ok: true };
+    const run = await queueAutomationRun(tenantId, automation.id, contactId || null, phone, ctx, { skipWaits });
+    return { ok: true, run };
   });
 
   // ── GET /:id/runs — run history ──
@@ -159,15 +159,19 @@ export async function automationRoutes(app: FastifyInstance) {
     });
     if (!existing) return reply.code(404).send({ error: "Automação não encontrada" });
 
-    const runs = await db.query.automationRuns.findMany({
-      where: and(
-        eq(automationRuns.automationId, id),
-        eq(automationRuns.tenantId, tenantId),
-      ),
-      orderBy: [desc(automationRuns.startedAt)],
-      limit: 50,
-    });
+    const rows = await db.execute(sql`
+      SELECT ar.id, ar.automation_id, ar.contact_id, ar.status, ar.current_step,
+             ar.started_at, ar.completed_at, ar.error,
+             c.first_name, c.last_name, c.email as contact_email
+      FROM automation_runs ar
+      LEFT JOIN contacts c ON c.id = ar.contact_id
+      WHERE ar.tenant_id = ${tenantId}
+        AND ar.automation_id = ${id}
+      ORDER BY ar.started_at DESC
+      LIMIT 50
+    `);
 
+    const runs = Array.isArray(rows) ? rows : (rows as any).rows || [];
     return { runs };
   });
 

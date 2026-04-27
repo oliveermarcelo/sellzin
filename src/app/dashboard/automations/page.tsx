@@ -166,6 +166,29 @@ export default function AutomationsPage() {
 
   useEffect(() => { load(); }, []);
 
+  const hasRunningRuns = recentRuns.some((run: any) => run.status === "running");
+  const hasRunningExpandedRuns = automationRuns.some((run: any) => run.status === "running");
+
+  useEffect(() => {
+    if (!hasRunningRuns && !hasRunningExpandedRuns) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const runsData = await api.getRecentRuns().catch(() => ({ runs: [] }));
+        setRecentRuns(runsData.runs || []);
+
+        if (expandedId) {
+          const data = await api.getAutomationRuns(expandedId).catch(() => ({ runs: [] }));
+          setAutomationRuns(data.runs || []);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [expandedId, hasRunningExpandedRuns, hasRunningRuns]);
+
   const openCreate = () => {
     setForm(EMPTY);
     setEditingId(null);
@@ -243,7 +266,11 @@ export default function AutomationsPage() {
     if (!testPhone.trim()) { alert("Informe o número de WhatsApp para teste"); return; }
     setRunningId(testModal.id);
     try {
-      await api.runAutomation(testModal.id, { phone: testPhone.trim(), name: testName.trim() || "Teste" });
+      await api.runAutomation(testModal.id, {
+        phone: testPhone.trim(),
+        name: testName.trim() || "Teste",
+        skipWaits: true,
+      });
       setTestModal(null);
       await load();
       setTimeout(() => setActiveTab("history"), 300);
@@ -420,12 +447,12 @@ export default function AutomationsPage() {
                                 <RunStatusIcon status={run.status} />
                                 <span className="capitalize">{run.status}</span>
                                 <span className="text-gray-400">•</span>
-                                <span className="text-gray-400">{timeAgo(run.started_at)}</span>
-                                {run.contact_id && (
+                                <span className="text-gray-400">{timeAgo(run.started_at || run.startedAt)}</span>
+                                {(run.contact_id || run.contactId) && (
                                   <>
                                     <span className="text-gray-400">•</span>
                                     <span className="text-gray-500 truncate max-w-[120px]">
-                                      {run.first_name || run.contact_email || "Contato"}
+                                      {[run.first_name, run.last_name].filter(Boolean).join(" ") || run.contact_email || "Contato"}
                                     </span>
                                   </>
                                 )}
@@ -511,7 +538,7 @@ export default function AutomationsPage() {
       >
         <div className="space-y-4">
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-xs text-amber-700">
-            A automação será disparada agora e percorrerá todos os passos (incluindo esperas). A mensagem de WhatsApp será enviada para o número informado.
+            O teste manual ignora etapas de espera e dispara somente esta automação. A mensagem de WhatsApp será enviada para o número informado.
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-gray-600">Número de WhatsApp para teste</label>

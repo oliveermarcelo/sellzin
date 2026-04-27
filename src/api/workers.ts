@@ -582,7 +582,7 @@ function delayMs(value: number, unit: string): number {
 
 // ── Automation Step Worker ──
 const automationWorker = new Worker("automations", async (job: Job) => {
-  const { automationId, runId, tenantId, contactId, phone, step, context } = job.data;
+  const { automationId, runId, tenantId, contactId, phone, step, context, skipWaits } = job.data;
 
   const automation = await db.query.automations.findFirst({ where: eq(automations.id, automationId) });
   if (!automation || !automation.isActive) {
@@ -611,11 +611,12 @@ const automationWorker = new Worker("automations", async (job: Job) => {
 
   if (action.type === "wait") {
     const ms = delayMs(action.delayValue || 1, action.delayUnit || "hours");
-    await automationQueue.add("run-step",
-      { automationId, runId, tenantId, contactId, phone, step: nextStep, context },
-      { delay: ms }
+    await automationQueue.add(
+      "run-step",
+      { automationId, runId, tenantId, contactId, phone, step: nextStep, context, skipWaits },
+      skipWaits ? undefined : { delay: ms }
     );
-    return { waiting: ms };
+    return skipWaits ? { skipped_wait: ms } : { waiting: ms };
   }
 
   if (action.type === "whatsapp") {
@@ -624,9 +625,9 @@ const automationWorker = new Worker("automations", async (job: Job) => {
     if (phone) {
       await whatsappQueueRef.add("send-message", { tenantId, phone, message, contactId });
     }
-    await automationQueue.add("run-step",
-      { automationId, runId, tenantId, contactId, phone, step: nextStep, context }
-    );
+    await automationQueue.add("run-step", {
+      automationId, runId, tenantId, contactId, phone, step: nextStep, context, skipWaits,
+    });
     return { sent: true };
   }
 
@@ -644,16 +645,16 @@ const automationWorker = new Worker("automations", async (job: Job) => {
         WHERE id = ${contactId}
       `);
     }
-    await automationQueue.add("run-step",
-      { automationId, runId, tenantId, contactId, phone, step: nextStep, context }
-    );
+    await automationQueue.add("run-step", {
+      automationId, runId, tenantId, contactId, phone, step: nextStep, context, skipWaits,
+    });
     return { tagged: action.tag };
   }
 
   // Unknown action — skip it
-  await automationQueue.add("run-step",
-    { automationId, runId, tenantId, contactId, phone, step: nextStep, context }
-  );
+  await automationQueue.add("run-step", {
+    automationId, runId, tenantId, contactId, phone, step: nextStep, context, skipWaits,
+  });
   return { skipped_step: action.type };
 }, { connection: redisConnection, concurrency: 5 });
 

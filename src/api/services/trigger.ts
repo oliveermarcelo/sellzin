@@ -7,6 +7,36 @@ import { eq, and } from "drizzle-orm";
 
 const automationQueue = new Queue("automations", { connection: redisConnection });
 
+export async function queueAutomationRun(
+  tenantId: string,
+  automationId: string,
+  contactId: string | null,
+  phone: string | null,
+  context: Record<string, any> = {},
+  options: { skipWaits?: boolean } = {}
+) {
+  const [run] = await db.insert(automationRuns).values({
+    tenantId,
+    automationId,
+    contactId: contactId || null,
+    status: "running",
+    context,
+  }).returning();
+
+  await automationQueue.add("run-step", {
+    automationId,
+    runId: run.id,
+    tenantId,
+    contactId,
+    phone,
+    step: 0,
+    context,
+    skipWaits: !!options.skipWaits,
+  });
+
+  return run;
+}
+
 export async function triggerAutomations(
   tenantId: string,
   trigger: string,
@@ -24,23 +54,7 @@ export async function triggerAutomations(
     });
 
     for (const automation of active) {
-      const [run] = await db.insert(automationRuns).values({
-        tenantId,
-        automationId: automation.id,
-        contactId: contactId || null,
-        status: "running",
-        context,
-      }).returning();
-
-      await automationQueue.add("run-step", {
-        automationId: automation.id,
-        runId: run.id,
-        tenantId,
-        contactId,
-        phone,
-        step: 0,
-        context,
-      });
+      await queueAutomationRun(tenantId, automation.id, contactId, phone, context);
     }
   } catch (e: any) {
     console.error(`[automations] triggerAutomations error (${trigger}):`, e.message);
