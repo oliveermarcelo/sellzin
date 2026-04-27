@@ -123,24 +123,24 @@ export async function automationRoutes(app: FastifyInstance) {
   app.post("/:id/run", async (req, reply) => {
     const { tenantId } = req.user as any;
     const { id } = req.params as any;
-    const { contactId } = req.body as any;
+    const { contactId, phone: directPhone, name: directName } = req.body as any;
 
     const automation = await db.query.automations.findFirst({
       where: and(eq(automations.id, id), eq(automations.tenantId, tenantId)),
     });
     if (!automation) return reply.code(404).send({ error: "Automação não encontrada" });
 
-    let phone: string | null = null;
-    let name = "";
-    let ctx: Record<string, any> = {};
+    let phone: string | null = directPhone || null;
+    let name = directName || "Teste";
+    let ctx: Record<string, any> = { nome: name, name, email: "", total: "0" };
 
     if (contactId) {
       const contact = await db.query.contacts.findFirst({
         where: and(eq(contacts.id, contactId), eq(contacts.tenantId, tenantId)),
       });
       if (contact) {
-        phone = contact.phone || null;
-        name = [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.email || "";
+        phone = contact.phone || directPhone || null;
+        name = [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.email || directName || "Teste";
         ctx = { nome: name, name, email: contact.email || "", total: "0" };
       }
     }

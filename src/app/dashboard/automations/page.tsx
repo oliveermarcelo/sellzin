@@ -141,6 +141,9 @@ export default function AutomationsPage() {
   const [togglingId, setTogglingId]           = useState<string | null>(null);
   const [deletingId, setDeletingId]           = useState<string | null>(null);
   const [runningId, setRunningId]             = useState<string | null>(null);
+  const [testModal, setTestModal]             = useState<{ id: string; name: string } | null>(null);
+  const [testPhone, setTestPhone]             = useState("");
+  const [testName, setTestName]               = useState("Teste");
   const [activeTab, setActiveTab]             = useState<"list" | "history">("list");
   const [expandedId, setExpandedId]           = useState<string | null>(null);
   const [automationRuns, setAutomationRuns]   = useState<any[]>([]);
@@ -229,12 +232,21 @@ export default function AutomationsPage() {
     finally { setDeletingId(null); }
   };
 
-  const runManual = async (id: string) => {
-    setRunningId(id);
+  const openTestModal = (a: any) => {
+    setTestModal({ id: a.id, name: a.name });
+    setTestPhone("");
+    setTestName("Teste");
+  };
+
+  const runManual = async () => {
+    if (!testModal) return;
+    if (!testPhone.trim()) { alert("Informe o número de WhatsApp para teste"); return; }
+    setRunningId(testModal.id);
     try {
-      await api.runAutomation(id);
-      alert("Automação disparada! Acompanhe na aba Histórico.");
+      await api.runAutomation(testModal.id, { phone: testPhone.trim(), name: testName.trim() || "Teste" });
+      setTestModal(null);
       await load();
+      setTimeout(() => setActiveTab("history"), 300);
     } catch (e: any) { alert(e.message); }
     finally { setRunningId(null); }
   };
@@ -374,15 +386,12 @@ export default function AutomationsPage() {
                             {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                           </button>
                           <button
-                            onClick={() => runManual(a.id)}
-                            disabled={runningId === a.id}
+                            onClick={() => openTestModal(a)}
+                            disabled={!!runningId}
                             className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 font-medium"
-                            title="Disparar manualmente (sem contato)"
+                            title="Disparar manualmente com um número de teste"
                           >
-                            {runningId === a.id
-                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              : <Play className="w-3.5 h-3.5" />
-                            }
+                            <Play className="w-3.5 h-3.5" />
                             Testar
                           </button>
                           <button onClick={() => openEdit(a)}
@@ -492,6 +501,50 @@ export default function AutomationsPage() {
           )}
         </div>
       )}
+
+      {/* Test Modal */}
+      <Modal
+        open={!!testModal}
+        onClose={() => setTestModal(null)}
+        title={`Testar: ${testModal?.name}`}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-xs text-amber-700">
+            A automação será disparada agora e percorrerá todos os passos (incluindo esperas). A mensagem de WhatsApp será enviada para o número informado.
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-600">Número de WhatsApp para teste</label>
+            <input
+              type="tel"
+              value={testPhone}
+              onChange={e => setTestPhone(e.target.value)}
+              placeholder="Ex: 5511999999999"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-900 focus:outline-none focus:border-indigo-400"
+              onKeyDown={e => e.key === "Enter" && runManual()}
+            />
+            <p className="text-[10px] text-gray-400">Formato: código país + DDD + número (sem +, espaços ou traços)</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-600">Nome para {"{{nome}}"}</label>
+            <input
+              type="text"
+              value={testName}
+              onChange={e => setTestName(e.target.value)}
+              placeholder="Nome do contato de teste"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-900 focus:outline-none focus:border-indigo-400"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={runManual} loading={!!runningId} className="flex-1">
+              <Play className="w-3.5 h-3.5" /> Disparar Agora
+            </Button>
+            <Button variant="secondary" onClick={() => setTestModal(null)} className="flex-1">
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Modal */}
       <Modal
