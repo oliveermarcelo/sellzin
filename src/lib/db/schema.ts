@@ -318,6 +318,32 @@ export const automations = pgTable(
   })
 );
 
+// ── Automation Runs ──
+
+export const automationRuns = pgTable(
+  "automation_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    automationId: uuid("automation_id")
+      .notNull()
+      .references(() => automations.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id"),
+    status: varchar("status", { length: 20 }).notNull().default("running"), // running|completed|failed|skipped
+    currentStep: integer("current_step").notNull().default(0),
+    context: jsonb("context").default({}),
+    error: text("error"),
+    startedAt: timestamp("started_at").notNull().defaultNow(),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => ({
+    tenantIdx: index("automation_runs_tenant_idx").on(table.tenantId),
+    automationIdx: index("automation_runs_automation_idx").on(table.automationId),
+  })
+);
+
 // ── Campaigns ──
 
 export const campaigns = pgTable(
@@ -516,6 +542,11 @@ export const interactionsRelations = relations(interactions, ({ one }) => ({
 
 export const assistantMessagesRelations = relations(assistantMessages, ({ one }) => ({
   tenant: one(tenants, { fields: [assistantMessages.tenantId], references: [tenants.id] }),
+}));
+
+export const automationRunsRelations = relations(automationRuns, ({ one }) => ({
+  tenant: one(tenants, { fields: [automationRuns.tenantId], references: [tenants.id] }),
+  automation: one(automations, { fields: [automationRuns.automationId], references: [automations.id] }),
 }));
 
 export const productsRelations = relations(products, ({ one }) => ({

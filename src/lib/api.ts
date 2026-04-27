@@ -168,6 +168,9 @@ class ApiClient {
   updateAutomation(id: string, data: any) { return this.request(`/automations/${id}`, { method: "PUT", body: data }); }
   deleteAutomation(id: string) { return this.request(`/automations/${id}`, { method: "DELETE" }); }
   toggleAutomation(id: string) { return this.request(`/automations/${id}/toggle`, { method: "PATCH" }); }
+  runAutomation(id: string, contactId?: string) { return this.request(`/automations/${id}/run`, { method: "POST", body: { contactId } }); }
+  getAutomationRuns(id: string) { return this.request(`/automations/${id}/runs`); }
+  getRecentRuns() { return this.request("/automations/runs/recent"); }
 
   // WhatsApp
   getWhatsappChannels() { return this.request("/whatsapp/channels"); }

@@ -1,10 +1,11 @@
 // @ts-nocheck
-import { Worker, Job } from "bullmq";
+import { Worker, Job, Queue } from "bullmq";
 import { redisConnection } from "../lib/redis";
 import { db } from "../lib/db";
-import { contacts, orders, abandonedCarts, webhookLogs, interactions, whatsappChannels, stores } from "../lib/db/schema";
+import { contacts, orders, abandonedCarts, webhookLogs, interactions, whatsappChannels, stores, automations, automationRuns } from "../lib/db/schema";
 import { EvolutionService, WhatsAppOfficialService } from "./services/whatsapp";
 import { calculateRFM } from "./services/rfm";
+import { triggerAutomations } from "./services/trigger";
 import { eq, and, sql } from "drizzle-orm";
 
 // ── Webhook Worker ──
@@ -202,6 +203,10 @@ async function processMagentoWebhook(tenantId: string, storeId: string, event: s
 async function upsertOrder(tenantId: string, storeId: string, data: any) {
   // Find or create contact
   let contactId: string | null = null;
+  let isNewContact = false;
+  let contactPhone: string | null = null;
+  let contactName = "";
+
   if (data.customerEmail || data.customerPhone) {
     const existing = await db.query.contacts.findFirst({
       where: and(
@@ -212,6 +217,8 @@ async function upsertOrder(tenantId: string, storeId: string, data: any) {
 
     if (existing) {
       contactId = existing.id;
+      contactPhone = existing.phone || data.customerPhone || null;
+      contactName = [existing.firstName, existing.lastName].filter(Boolean).join(" ") || existing.email || "";
       // Always update address/phone with fresh data from the order
       const patch: any = { updatedAt: new Date() };
       if (data.customerCity) patch.city = data.customerCity;
@@ -229,10 +236,17 @@ async function upsertOrder(tenantId: string, storeId: string, data: any) {
         state: data.customerState,
       }).returning({ id: contacts.id });
       contactId = newContact.id;
+      contactPhone = data.customerPhone || null;
+      contactName = [data.customerFirst, data.customerLast].filter(Boolean).join(" ") || data.customerEmail || "";
+      isNewContact = true;
     }
   }
 
-  // Upsert order
+  // Upsert order — check if it already existed (to detect status changes)
+  const existingOrder = await db.query.orders.findFirst({
+    where: and(eq(orders.storeId, storeId), eq(orders.externalId, data.externalId)),
+  });
+
   await db.insert(orders).values({
     tenantId, storeId, contactId,
     externalId: data.externalId,
@@ -266,6 +280,32 @@ async function upsertOrder(tenantId: string, storeId: string, data: any) {
         updated_at = NOW()
       WHERE id = ${contactId}
     `);
+  }
+
+  // ── Fire automation triggers ──
+  const ctx = {
+    nome: contactName,
+    name: contactName,
+    email: data.customerEmail || "",
+    total: data.total || "0",
+    order_number: data.orderNumber || "",
+    payment_method: data.paymentMethod || "",
+  };
+
+  if (isNewContact && contactId) {
+    await triggerAutomations(tenantId, "customer_created", contactId, contactPhone, ctx);
+  }
+
+  if (!existingOrder && contactId) {
+    // Brand new order
+    await triggerAutomations(tenantId, "order_placed", contactId, contactPhone, ctx);
+  } else if (existingOrder && existingOrder.status !== data.status && contactId) {
+    // Status changed
+    if (data.status === "shipped") {
+      await triggerAutomations(tenantId, "order_shipped", contactId, contactPhone, ctx);
+    } else if (data.status === "delivered") {
+      await triggerAutomations(tenantId, "order_delivered", contactId, contactPhone, ctx);
+    }
   }
 }
 
@@ -430,7 +470,7 @@ async function syncMagentoAbandonedCarts(store: any, tenantId: string, base?: st
       }
 
       // Upsert abandoned cart
-      await db.insert(abandonedCarts).values({
+      const cartResult = await db.insert(abandonedCarts).values({
         tenantId, storeId: store.id, contactId,
         externalId: String(quote.id),
         email: customerEmail,
@@ -442,7 +482,24 @@ async function syncMagentoAbandonedCarts(store: any, tenantId: string, base?: st
       }).onConflictDoUpdate({
         target: [abandonedCarts.storeId, abandonedCarts.externalId],
         set: { items, total, abandonedAt, updatedAt: new Date() },
-      });
+      }).returning({ id: abandonedCarts.id, isNew: sql<boolean>`xmax = 0` });
+
+      // Fire cart_abandoned automation only for new carts
+      const isNewCart = cartResult[0]?.isNew !== false;
+      if (isNewCart && contactId) {
+        const customerName = [quote.customer?.firstname || quote.billing_address?.firstname, quote.customer?.lastname || quote.billing_address?.lastname].filter(Boolean).join(" ") || customerEmail;
+        const phone = quote.billing_address?.telephone || null;
+        const itemNames = items.slice(0, 2).map((i: any) => i.name).join(", ");
+        const totalFmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(parseFloat(total) || 0);
+        await triggerAutomations(tenantId, "cart_abandoned", contactId, phone, {
+          nome: customerName,
+          name: customerName,
+          email: customerEmail,
+          total: totalFmt,
+          items: itemNames,
+          checkout_url: checkoutUrl,
+        });
+      }
     }
 
     if (quotes.length < pageSize) break;
@@ -505,10 +562,105 @@ function mapMagentoStatus(status: string): string {
   return "pending";
 }
 
+// ── Automation Queues ──
+const automationQueue = new Queue("automations", { connection: redisConnection });
+const whatsappQueueRef = new Queue("whatsapp", { connection: redisConnection });
+// Note: triggerAutomations is imported from ./services/trigger — both this worker
+// and routes use that module. They share the same Redis queue name.
+
+// ── Helper: interpolate template variables ──
+function interpolateMessage(template: string, ctx: Record<string, any>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => ctx[key] ?? "");
+}
+
+function delayMs(value: number, unit: string): number {
+  if (unit === "minutes") return value * 60 * 1000;
+  if (unit === "hours")   return value * 60 * 60 * 1000;
+  if (unit === "days")    return value * 24 * 60 * 60 * 1000;
+  return value * 60 * 1000;
+}
+
+// ── Automation Step Worker ──
+const automationWorker = new Worker("automations", async (job: Job) => {
+  const { automationId, runId, tenantId, contactId, phone, step, context } = job.data;
+
+  const automation = await db.query.automations.findFirst({ where: eq(automations.id, automationId) });
+  if (!automation || !automation.isActive) {
+    await db.update(automationRuns)
+      .set({ status: "skipped", completedAt: new Date() })
+      .where(eq(automationRuns.id, runId));
+    return { skipped: true };
+  }
+
+  const actions = (automation.actions || []) as any[];
+
+  if (step >= actions.length) {
+    await db.update(automationRuns)
+      .set({ status: "completed", completedAt: new Date(), currentStep: step })
+      .where(eq(automationRuns.id, runId));
+    await db.execute(sql`UPDATE automations SET total_executions = total_executions + 1 WHERE id = ${automationId}`);
+    return { completed: true };
+  }
+
+  const action = actions[step];
+  const nextStep = step + 1;
+
+  await db.update(automationRuns)
+    .set({ currentStep: step })
+    .where(eq(automationRuns.id, runId));
+
+  if (action.type === "wait") {
+    const ms = delayMs(action.delayValue || 1, action.delayUnit || "hours");
+    await automationQueue.add("run-step",
+      { automationId, runId, tenantId, contactId, phone, step: nextStep, context },
+      { delay: ms }
+    );
+    return { waiting: ms };
+  }
+
+  if (action.type === "whatsapp") {
+    const name = context?.nome || context?.name || "";
+    const message = interpolateMessage(action.message || "", { nome: name, name, ...context });
+    if (phone) {
+      await whatsappQueueRef.add("send-message", { tenantId, phone, message, contactId });
+    }
+    await automationQueue.add("run-step",
+      { automationId, runId, tenantId, contactId, phone, step: nextStep, context }
+    );
+    return { sent: true };
+  }
+
+  if (action.type === "tag" && contactId && action.tag) {
+    if (action.action === "remove") {
+      await db.execute(sql`
+        UPDATE contacts
+        SET tags = COALESCE((SELECT jsonb_agg(t) FROM jsonb_array_elements_text(COALESCE(tags, '[]'::jsonb)) t WHERE t != ${action.tag}), '[]'::jsonb)
+        WHERE id = ${contactId}
+      `);
+    } else {
+      await db.execute(sql`
+        UPDATE contacts
+        SET tags = COALESCE(tags, '[]'::jsonb) || ${JSON.stringify([action.tag])}::jsonb
+        WHERE id = ${contactId}
+      `);
+    }
+    await automationQueue.add("run-step",
+      { automationId, runId, tenantId, contactId, phone, step: nextStep, context }
+    );
+    return { tagged: action.tag };
+  }
+
+  // Unknown action — skip it
+  await automationQueue.add("run-step",
+    { automationId, runId, tenantId, contactId, phone, step: nextStep, context }
+  );
+  return { skipped_step: action.type };
+}, { connection: redisConnection, concurrency: 5 });
+
 // ── Error handlers ──
-[webhookWorker, whatsappWorker, recoveryWorker, syncWorker].forEach(w => {
+[webhookWorker, whatsappWorker, recoveryWorker, syncWorker, automationWorker].forEach(w => {
   w.on("failed", (job, err) => console.error(`[${w.name}] Job ${job?.id} failed:`, err.message));
   w.on("completed", (job) => console.log(`[${w.name}] Job ${job.id} completed`));
 });
 
-console.log("🔄 Workers iniciados: webhooks, whatsapp, recovery, sync");
+console.log("🔄 Workers iniciados: webhooks, whatsapp, recovery, sync, automations");

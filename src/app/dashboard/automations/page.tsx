@@ -6,6 +6,7 @@ import { PageHeader, Button, Badge, Modal, Input, Loading } from "@/components/u
 import {
   Zap, Plus, ShoppingCart, Package, UserPlus, Calendar,
   TrendingUp, MessageCircle, Clock, ArrowRight, Trash2,
+  Play, History, CheckCircle, XCircle, Loader2, ChevronDown, ChevronUp,
 } from "lucide-react";
 
 // ── Trigger definitions ──
@@ -73,7 +74,7 @@ const TEMPLATES = [
     description: "Notifica com código de rastreamento",
     trigger: "order_shipped",
     actions: [
-      { type: "whatsapp", message: "{{nome}}, seu pedido foi enviado! 🚚 Código de rastreamento: {{tracking_code}}. Previsão de entrega: 3–7 dias úteis." },
+      { type: "whatsapp", message: "{{nome}}, seu pedido foi enviado! 🚚 Previsão de entrega: 3–7 dias úteis." },
     ],
   },
   {
@@ -113,23 +114,49 @@ function blankAction(type = "whatsapp") {
 
 const ACTION_ICONS: Record<string, any> = { wait: Clock, whatsapp: MessageCircle, tag: Zap };
 
+function RunStatusIcon({ status }: { status: string }) {
+  if (status === "completed") return <CheckCircle className="w-3.5 h-3.5 text-green-500" />;
+  if (status === "failed")    return <XCircle className="w-3.5 h-3.5 text-red-500" />;
+  if (status === "running")   return <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />;
+  return <Clock className="w-3.5 h-3.5 text-gray-400" />;
+}
+
+function timeAgo(date: string) {
+  const d = new Date(date);
+  const s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 60)   return "agora";
+  if (s < 3600) return `${Math.floor(s / 60)}min atrás`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h atrás`;
+  return `${Math.floor(s / 86400)}d atrás`;
+}
+
 export default function AutomationsPage() {
-  const [automations, setAutomations] = useState<any[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [saving, setSaving]           = useState(false);
-  const [modal, setModal]             = useState<"create" | "edit" | null>(null);
-  const [editingId, setEditingId]     = useState<string | null>(null);
-  const [showTemplates, setShowTemplates] = useState(true);
-  const [togglingId, setTogglingId]   = useState<string | null>(null);
-  const [deletingId, setDeletingId]   = useState<string | null>(null);
+  const [automationsList, setAutomationsList] = useState<any[]>([]);
+  const [recentRuns, setRecentRuns]           = useState<any[]>([]);
+  const [loading, setLoading]                 = useState(true);
+  const [saving, setSaving]                   = useState(false);
+  const [modal, setModal]                     = useState<"create" | "edit" | null>(null);
+  const [editingId, setEditingId]             = useState<string | null>(null);
+  const [showTemplates, setShowTemplates]     = useState(true);
+  const [togglingId, setTogglingId]           = useState<string | null>(null);
+  const [deletingId, setDeletingId]           = useState<string | null>(null);
+  const [runningId, setRunningId]             = useState<string | null>(null);
+  const [activeTab, setActiveTab]             = useState<"list" | "history">("list");
+  const [expandedId, setExpandedId]           = useState<string | null>(null);
+  const [automationRuns, setAutomationRuns]   = useState<any[]>([]);
+  const [loadingRuns, setLoadingRuns]         = useState(false);
 
   const EMPTY = { name: "", description: "", trigger: "cart_abandoned", actions: [] as any[] };
   const [form, setForm] = useState(EMPTY);
 
   const load = async () => {
     try {
-      const data = await api.getAutomations();
-      setAutomations(data.automations || []);
+      const [data, runsData] = await Promise.all([
+        api.getAutomations(),
+        api.getRecentRuns().catch(() => ({ runs: [] })),
+      ]);
+      setAutomationsList(data.automations || []);
+      setRecentRuns(runsData.runs || []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -187,7 +214,7 @@ export default function AutomationsPage() {
     setTogglingId(id);
     try {
       const res = await api.toggleAutomation(id);
-      setAutomations(prev => prev.map(a => a.id === id ? { ...a, isActive: res.automation.isActive } : a));
+      setAutomationsList(prev => prev.map(a => a.id === id ? { ...a, isActive: res.automation.isActive } : a));
     } catch (e: any) { alert(e.message); }
     finally { setTogglingId(null); }
   };
@@ -197,16 +224,37 @@ export default function AutomationsPage() {
     setDeletingId(id);
     try {
       await api.deleteAutomation(id);
-      setAutomations(prev => prev.filter(a => a.id !== id));
+      setAutomationsList(prev => prev.filter(a => a.id !== id));
     } catch (e: any) { alert(e.message); }
     finally { setDeletingId(null); }
   };
 
+  const runManual = async (id: string) => {
+    setRunningId(id);
+    try {
+      await api.runAutomation(id);
+      alert("Automação disparada! Acompanhe na aba Histórico.");
+      await load();
+    } catch (e: any) { alert(e.message); }
+    finally { setRunningId(null); }
+  };
+
+  const toggleExpand = async (id: string) => {
+    if (expandedId === id) { setExpandedId(null); return; }
+    setExpandedId(id);
+    setLoadingRuns(true);
+    try {
+      const data = await api.getAutomationRuns(id);
+      setAutomationRuns(data.runs || []);
+    } catch { setAutomationRuns([]); }
+    finally { setLoadingRuns(false); }
+  };
+
   if (loading) return <Loading />;
 
-  const activeCount = automations.filter(a => a.isActive).length;
-  const totalExec   = automations.reduce((s, a) => s + (a.totalExecutions  || 0), 0);
-  const totalConv   = automations.reduce((s, a) => s + (a.totalConversions || 0), 0);
+  const activeCount = automationsList.filter(a => a.isActive).length;
+  const totalExec   = automationsList.reduce((s, a) => s + (a.totalExecutions  || 0), 0);
+  const totalConv   = automationsList.reduce((s, a) => s + (a.totalConversions || 0), 0);
 
   return (
     <div>
@@ -230,83 +278,218 @@ export default function AutomationsPage() {
         ))}
       </div>
 
-      {/* List */}
-      {automations.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-          <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center mx-auto mb-4">
-            <Zap className="w-6 h-6 text-indigo-500" />
-          </div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-1">Nenhuma automação criada</h3>
-          <p className="text-sm text-gray-400 mb-4">Crie fluxos automáticos para engajar seus clientes</p>
-          <Button size="sm" onClick={openCreate}><Plus className="w-3.5 h-3.5" /> Criar Automação</Button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {automations.map(a => {
-            const trig = getTrigger(a.trigger);
-            const TrigIcon = trig.icon;
-            return (
-              <div key={a.id} className={`bg-white border rounded-xl p-5 transition ${a.isActive ? "border-indigo-200" : "border-gray-200"}`}>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: trig.color + "18" }}>
-                      <TrigIcon className="w-4 h-4" style={{ color: trig.color }} />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-gray-800">{a.name}</h3>
-                      {a.description && <p className="text-xs text-gray-400 mt-0.5">{a.description}</p>}
-                    </div>
-                  </div>
-                  {/* Toggle */}
-                  <button
-                    onClick={() => toggle(a.id)}
-                    disabled={!!togglingId}
-                    className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${a.isActive ? "bg-indigo-500" : "bg-gray-300"}`}
-                  >
-                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${a.isActive ? "left-[22px]" : "left-0.5"}`} />
-                  </button>
-                </div>
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 border-b border-gray-200">
+        {[
+          { key: "list",    label: "Automações" },
+          { key: "history", label: `Histórico${recentRuns.length > 0 ? ` (${recentRuns.length})` : ""}` },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key as any)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition -mb-px ${
+              activeTab === tab.key
+                ? "border-indigo-500 text-indigo-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-                {/* Flow preview */}
-                <div className="flex items-center gap-1 mb-3 flex-wrap">
-                  <Badge color={trig.color} size="xs">{trig.label}</Badge>
-                  {(a.actions || []).slice(0, 6).map((action: any, i: number) => {
-                    const AIcon = ACTION_ICONS[action.type] || Zap;
-                    return (
-                      <div key={i} className="flex items-center gap-1">
-                        <ArrowRight className="w-2.5 h-2.5 text-gray-300" />
-                        <div className="w-5 h-5 rounded bg-gray-100 flex items-center justify-center"
-                          title={action.type === "wait" ? `Aguardar ${formatDelay(action)}` : action.message || action.type}>
-                          <AIcon className="w-3 h-3 text-gray-500" />
+      {activeTab === "list" ? (
+        <>
+          {/* Automation List */}
+          {automationsList.length === 0 ? (
+            <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
+              <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center mx-auto mb-4">
+                <Zap className="w-6 h-6 text-indigo-500" />
+              </div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-1">Nenhuma automação criada</h3>
+              <p className="text-sm text-gray-400 mb-4">Crie fluxos automáticos para engajar seus clientes</p>
+              <Button size="sm" onClick={openCreate}><Plus className="w-3.5 h-3.5" /> Criar Automação</Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {automationsList.map(a => {
+                const trig = getTrigger(a.trigger);
+                const TrigIcon = trig.icon;
+                const isExpanded = expandedId === a.id;
+                return (
+                  <div key={a.id} className={`bg-white border rounded-xl overflow-hidden transition ${a.isActive ? "border-indigo-200" : "border-gray-200"}`}>
+                    <div className="p-5">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: trig.color + "18" }}>
+                            <TrigIcon className="w-4 h-4" style={{ color: trig.color }} />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-semibold text-gray-800">{a.name}</h3>
+                            {a.description && <p className="text-xs text-gray-400 mt-0.5">{a.description}</p>}
+                          </div>
                         </div>
-                        {action.type === "wait" && (
-                          <span className="text-[10px] text-gray-400">{formatDelay(action)}</span>
+                        {/* Toggle */}
+                        <button
+                          onClick={() => toggle(a.id)}
+                          disabled={!!togglingId}
+                          className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${a.isActive ? "bg-indigo-500" : "bg-gray-300"}`}
+                        >
+                          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${a.isActive ? "left-[22px]" : "left-0.5"}`} />
+                        </button>
+                      </div>
+
+                      {/* Flow preview */}
+                      <div className="flex items-center gap-1 mb-3 flex-wrap">
+                        <Badge color={trig.color} size="xs">{trig.label}</Badge>
+                        {(a.actions || []).slice(0, 6).map((action: any, i: number) => {
+                          const AIcon = ACTION_ICONS[action.type] || Zap;
+                          return (
+                            <div key={i} className="flex items-center gap-1">
+                              <ArrowRight className="w-2.5 h-2.5 text-gray-300" />
+                              <div className="w-5 h-5 rounded bg-gray-100 flex items-center justify-center"
+                                title={action.type === "wait" ? `Aguardar ${formatDelay(action)}` : action.message || action.type}>
+                                <AIcon className="w-3 h-3 text-gray-500" />
+                              </div>
+                              {action.type === "wait" && (
+                                <span className="text-[10px] text-gray-400">{formatDelay(action)}</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                        <div className="flex items-center gap-4 text-xs text-gray-400">
+                          <span>{a.totalExecutions || 0} execuções</span>
+                          <span>{a.totalConversions || 0} conversões</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => toggleExpand(a.id)}
+                            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+                          >
+                            <History className="w-3.5 h-3.5" />
+                            {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          </button>
+                          <button
+                            onClick={() => runManual(a.id)}
+                            disabled={runningId === a.id}
+                            className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 font-medium"
+                            title="Disparar manualmente (sem contato)"
+                          >
+                            {runningId === a.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Play className="w-3.5 h-3.5" />
+                            }
+                            Testar
+                          </button>
+                          <button onClick={() => openEdit(a)}
+                            className="text-xs text-indigo-500 hover:text-indigo-700 font-medium">
+                            Editar
+                          </button>
+                          <button onClick={() => del(a.id)} disabled={deletingId === a.id}
+                            className="text-xs text-gray-400 hover:text-red-500">
+                            Excluir
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Inline run history */}
+                    {isExpanded && (
+                      <div className="border-t border-gray-100 bg-gray-50 px-4 py-3">
+                        {loadingRuns ? (
+                          <p className="text-xs text-gray-400 text-center py-2">Carregando...</p>
+                        ) : automationRuns.length === 0 ? (
+                          <p className="text-xs text-gray-400 text-center py-2">Nenhuma execução ainda</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {automationRuns.slice(0, 5).map((run: any) => (
+                              <div key={run.id} className="flex items-center gap-2 text-xs text-gray-600">
+                                <RunStatusIcon status={run.status} />
+                                <span className="capitalize">{run.status}</span>
+                                <span className="text-gray-400">•</span>
+                                <span className="text-gray-400">{timeAgo(run.started_at)}</span>
+                                {run.contact_id && (
+                                  <>
+                                    <span className="text-gray-400">•</span>
+                                    <span className="text-gray-500 truncate max-w-[120px]">
+                                      {run.first_name || run.contact_email || "Contato"}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-
-                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                  <div className="flex items-center gap-4 text-xs text-gray-400">
-                    <span>{a.totalExecutions || 0} execuções</span>
-                    <span>{a.totalConversions || 0} conversões</span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => openEdit(a)}
-                      className="text-xs text-indigo-500 hover:text-indigo-700 font-medium">
-                      Editar
-                    </button>
-                    <button onClick={() => del(a.id)} disabled={deletingId === a.id}
-                      className="text-xs text-gray-400 hover:text-red-500">
-                      Excluir
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
+        </>
+      ) : (
+        /* ── History Tab ── */
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          {recentRuns.length === 0 ? (
+            <div className="py-12 text-center">
+              <History className="w-8 h-8 text-gray-200 mx-auto mb-3" />
+              <p className="text-sm text-gray-400">Nenhuma execução registrada ainda</p>
+              <p className="text-xs text-gray-400 mt-1">
+                As execuções aparecerão aqui quando automações forem disparadas
+              </p>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Automação</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Contato</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Iniciado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {recentRuns.map((run: any) => {
+                  const trig = getTrigger(run.automation_trigger);
+                  return (
+                    <tr key={run.id} className="hover:bg-gray-50 transition">
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-gray-800 text-xs">{run.automation_name || "—"}</p>
+                        <p className="text-[10px] text-gray-400">{trig.label}</p>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-600">
+                        {run.contact_id
+                          ? ([run.first_name, run.last_name].filter(Boolean).join(" ") || run.contact_email || "—")
+                          : <span className="text-gray-400">Sem contato</span>
+                        }
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          run.status === "completed" ? "bg-green-100 text-green-700" :
+                          run.status === "failed"    ? "bg-red-100 text-red-700" :
+                          run.status === "running"   ? "bg-blue-100 text-blue-700" :
+                          "bg-gray-100 text-gray-600"
+                        }`}>
+                          <RunStatusIcon status={run.status} />
+                          {run.status === "completed" ? "Concluído" :
+                           run.status === "failed"    ? "Erro" :
+                           run.status === "running"   ? "Executando" : "Ignorado"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-400">
+                        {timeAgo(run.started_at)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
 
@@ -408,11 +591,16 @@ export default function AutomationsPage() {
 
                       {/* WhatsApp fields */}
                       {action.type === "whatsapp" && (
-                        <textarea value={action.message || ""}
-                          onChange={e => updateAction(idx, { message: e.target.value })}
-                          placeholder="Mensagem... Use {{nome}}, {{tracking_code}}, etc."
-                          rows={3}
-                          className="w-full px-2 py-1.5 rounded-md border border-gray-300 text-xs text-gray-700 resize-none focus:outline-none focus:border-red-500" />
+                        <div>
+                          <textarea value={action.message || ""}
+                            onChange={e => updateAction(idx, { message: e.target.value })}
+                            placeholder="Mensagem... Use {{nome}}, {{total}}, {{order_number}}, etc."
+                            rows={3}
+                            className="w-full px-2 py-1.5 rounded-md border border-gray-300 text-xs text-gray-700 resize-none focus:outline-none focus:border-red-500" />
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            Variáveis: {"{{nome}}"} {"{{email}}"} {"{{total}}"} {"{{order_number}}"} {"{{items}}"} {"{{checkout_url}}"}
+                          </p>
+                        </div>
                       )}
 
                       {/* Tag fields */}
