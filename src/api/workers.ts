@@ -131,14 +131,20 @@ const syncWorker = new Worker("sync", async (job: Job) => {
   await db.update(stores).set({ syncStatus: "syncing" }).where(eq(stores.id, storeId));
 
   try {
+    const since = type === "incremental" && store.lastSyncAt ? store.lastSyncAt : null;
     if (store.platform === "woocommerce") {
-      await syncWooCommerce(store, tenantId);
+      await syncWooCommerce(store, tenantId, since);
     } else if (store.platform === "magento") {
       await syncMagento(store, tenantId);
     }
     await db.update(stores).set({ syncStatus: "synced", lastSyncAt: new Date() }).where(eq(stores.id, storeId));
-    // Recalculate RFM scores after sync
     await calculateRFM(tenantId);
+    // Schedule next incremental sync in 1 hour
+    await syncQueue.add("sync", { storeId, tenantId, type: "incremental" }, {
+      delay: 60 * 60 * 1000,
+      jobId: `auto-sync-${storeId}`,
+      removeOnComplete: true,
+    });
   } catch (err: any) {
     await db.update(stores).set({ syncStatus: "error" }).where(eq(stores.id, storeId));
     throw err;
@@ -212,7 +218,9 @@ async function upsertOrder(tenantId: string, storeId: string, data: any) {
   let contactPhone: string | null = null;
   let contactName = "";
 
-  if (data.customerEmail || data.customerPhone) {
+  const incomingPhone = normalizePhone(data.customerPhone);
+
+  if (data.customerEmail || incomingPhone) {
     const existing = await db.query.contacts.findFirst({
       where: and(
         eq(contacts.tenantId, tenantId),
@@ -222,26 +230,30 @@ async function upsertOrder(tenantId: string, storeId: string, data: any) {
 
     if (existing) {
       contactId = existing.id;
-      contactPhone = existing.phone || data.customerPhone || null;
+      const normalizedExisting = normalizePhone(existing.phone);
+      contactPhone = normalizedExisting || incomingPhone || null;
       contactName = [existing.firstName, existing.lastName].filter(Boolean).join(" ") || existing.email || "";
-      // Always update address/phone with fresh data from the order
       const patch: any = { updatedAt: new Date() };
       if (data.customerCity) patch.city = data.customerCity;
       if (data.customerState) patch.state = data.customerState;
-      if (data.customerPhone && !existing.phone) patch.phone = data.customerPhone;
+      // Update phone if missing or not yet normalized with country code
+      if (incomingPhone && (!existing.phone || !existing.phone.startsWith("55"))) {
+        patch.phone = incomingPhone;
+        contactPhone = incomingPhone;
+      }
       await db.update(contacts).set(patch).where(eq(contacts.id, existing.id));
     } else {
       const [newContact] = await db.insert(contacts).values({
         tenantId, storeId,
         email: data.customerEmail,
-        phone: data.customerPhone,
+        phone: incomingPhone,
         firstName: data.customerFirst,
         lastName: data.customerLast,
         city: data.customerCity,
         state: data.customerState,
       }).returning({ id: contacts.id });
       contactId = newContact.id;
-      contactPhone = data.customerPhone || null;
+      contactPhone = incomingPhone || null;
       contactName = [data.customerFirst, data.customerLast].filter(Boolean).join(" ") || data.customerEmail || "";
       isNewContact = true;
     }
@@ -315,12 +327,13 @@ async function upsertOrder(tenantId: string, storeId: string, data: any) {
 }
 
 // ── Helper: Sync WooCommerce ──
-async function syncWooCommerce(store: any, tenantId: string) {
+async function syncWooCommerce(store: any, tenantId: string, since?: Date | null) {
   let page = 1;
   const perPage = 100;
+  const afterParam = since ? `&after=${since.toISOString()}` : "";
 
   while (true) {
-    const url = `${store.apiUrl}/wp-json/wc/v3/orders?per_page=${perPage}&page=${page}`;
+    const url = `${store.apiUrl}/wp-json/wc/v3/orders?per_page=${perPage}&page=${page}${afterParam}`;
     const auth = Buffer.from(`${store.apiKey}:${store.apiSecret}`).toString("base64");
     const res = await fetch(url, { headers: { Authorization: `Basic ${auth}` } });
     if (!res.ok) throw new Error(`WC API error: ${res.status}`);
@@ -570,8 +583,19 @@ function mapMagentoStatus(status: string): string {
 // ── Automation Queues ──
 const automationQueue = new Queue("automations", { connection: redisConnection });
 const whatsappQueueRef = new Queue("whatsapp", { connection: redisConnection });
+const syncQueue = new Queue("sync", { connection: redisConnection });
 // Note: triggerAutomations is imported from ./services/trigger — both this worker
 // and routes use that module. They share the same Redis queue name.
+
+// ── Helper: normalize Brazilian phone to E.164 (55DDNUMBER) ──
+function normalizePhone(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.startsWith("55") && digits.length >= 12) return digits;
+  if (digits.length >= 10 && digits.length <= 11) return "55" + digits;
+  return digits;
+}
 
 // ── Helper: interpolate template variables ──
 function interpolateMessage(template: string, ctx: Record<string, any>): string {
