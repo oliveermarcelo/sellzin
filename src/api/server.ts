@@ -18,6 +18,7 @@ import { automationRoutes } from "./routes/automations";
 import { productRoutes } from "./routes/products";
 import { trackingRoutes } from "./routes/tracking";
 import { competitorRoutes } from "./routes/competitors";
+import "./workers"; // start BullMQ workers (whatsapp, automations, recovery, sync)
 
 const PORT = parseInt(process.env.API_PORT || "3001");
 
