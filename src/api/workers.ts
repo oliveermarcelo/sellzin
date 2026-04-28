@@ -37,6 +37,8 @@ const whatsappWorker = new Worker("whatsapp", async (job: Job) => {
     ? await db.query.whatsappChannels.findFirst({ where: and(eq(whatsappChannels.id, channelId), eq(whatsappChannels.tenantId, tenantId)) })
     : await db.query.whatsappChannels.findFirst({ where: and(eq(whatsappChannels.tenantId, tenantId), eq(whatsappChannels.isActive, true)) });
 
+  console.log(`[whatsapp] channel: ${channel ? `${channel.provider} / ${channel.instanceName}` : "not found"}`);
+
   // Fallback to env-based Evolution API
   if (!channel) {
     const EVOLUTION_URL = process.env.EVOLUTION_API_URL;
@@ -45,6 +47,7 @@ const whatsappWorker = new Worker("whatsapp", async (job: Job) => {
       console.warn("[whatsapp] No channel configured");
       return { sent: false, reason: "not_configured" };
     }
+    console.log(`[whatsapp] using env fallback: ${EVOLUTION_URL}`);
     const svc = new EvolutionService(EVOLUTION_URL, EVOLUTION_KEY);
     const result = await svc.sendText("sellzin", phone, message);
     if (contactId) {
@@ -56,6 +59,7 @@ const whatsappWorker = new Worker("whatsapp", async (job: Job) => {
   try {
     let result: any;
     if (channel.provider === "evolution") {
+      console.log(`[whatsapp] calling Evolution: ${channel.evolutionUrl} / instance: ${channel.instanceName}`);
       const svc = new EvolutionService(channel.evolutionUrl!, channel.evolutionKey!);
       result = await svc.sendText(channel.instanceName!, phone, message);
     } else {
@@ -63,6 +67,7 @@ const whatsappWorker = new Worker("whatsapp", async (job: Job) => {
       result = await svc.sendText(phone, message);
     }
 
+    console.log(`[whatsapp] sent OK to ${phone}`);
     if (contactId) {
       await db.insert(interactions).values({
         tenantId, contactId, channel: "whatsapp",
@@ -73,7 +78,7 @@ const whatsappWorker = new Worker("whatsapp", async (job: Job) => {
 
     return { sent: true, result };
   } catch (err: any) {
-    console.error(`[whatsapp] Error: ${err.message}`);
+    console.error(`[whatsapp] Error sending to ${phone}: ${err.message}`);
     throw err;
   }
 }, { connection: redisConnection, concurrency: 3, limiter: { max: 10, duration: 60000 } });

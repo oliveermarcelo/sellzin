@@ -62,16 +62,23 @@ export class EvolutionService {
 
   async sendText(instanceName: string, phone: string, text: string) {
     const number = phone.replace(/\D/g, "");
-    const res = await fetch(`${this.url}/message/sendText/${instanceName}`, {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({ number, text }),
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Evolution sendText error: ${res.status} ${err}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(`${this.url}/message/sendText/${instanceName}`, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({ number, text }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Evolution sendText error: ${res.status} ${err}`);
+      }
+      return res.json();
+    } finally {
+      clearTimeout(timeout);
     }
-    return res.json();
   }
 
   async deleteInstance(instanceName: string) {
