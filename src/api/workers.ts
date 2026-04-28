@@ -201,6 +201,7 @@ async function processMagentoWebhook(tenantId: string, storeId: string, event: s
         price: i.price, total: i.row_total,
       })),
       customerEmail: payload.customer_email,
+      customerPhone: payload.billing_address?.telephone,
       customerFirst: payload.customer_firstname,
       customerLast: payload.customer_lastname,
       customerCity: payload.billing_address?.city,
@@ -328,14 +329,56 @@ async function upsertOrder(tenantId: string, storeId: string, data: any) {
 
 // ── Helper: Sync WooCommerce ──
 async function syncWooCommerce(store: any, tenantId: string, since?: Date | null) {
-  let page = 1;
-  const perPage = 100;
+  const auth = Buffer.from(`${store.apiKey}:${store.apiSecret}`).toString("base64");
+  const headers = { Authorization: `Basic ${auth}` };
   const afterParam = since ? `&after=${since.toISOString()}` : "";
 
+  // 1. Sync customers (full list on first sync, skipped on incremental — orders carry fresh data)
+  if (!since) {
+    let page = 1;
+    while (true) {
+      const url = `${store.apiUrl}/wp-json/wc/v3/customers?per_page=100&page=${page}`;
+      const res = await fetch(url, { headers });
+      if (!res.ok) break;
+      const customers = await res.json();
+      if (!customers.length) break;
+
+      for (const c of customers) {
+        const phone = normalizePhone(c.billing?.phone || c.meta_data?.find((m: any) => m.key === "billing_phone")?.value);
+        if (!c.email) continue;
+        const existing = await db.query.contacts.findFirst({
+          where: and(eq(contacts.tenantId, tenantId), eq(contacts.email, c.email)),
+        });
+        if (existing) {
+          const patch: any = { updatedAt: new Date() };
+          if (phone && (!existing.phone || !existing.phone.startsWith("55"))) patch.phone = phone;
+          if (c.billing?.city && !existing.city) patch.city = c.billing.city;
+          if (c.billing?.state && !existing.state) patch.state = c.billing.state;
+          await db.update(contacts).set(patch).where(eq(contacts.id, existing.id));
+        } else {
+          await db.insert(contacts).values({
+            tenantId, storeId: store.id,
+            externalId: String(c.id),
+            email: c.email,
+            phone,
+            firstName: c.first_name,
+            lastName: c.last_name,
+            city: c.billing?.city,
+            state: c.billing?.state,
+          }).onConflictDoNothing();
+        }
+      }
+
+      if (customers.length < 100) break;
+      page++;
+    }
+  }
+
+  // 2. Sync orders
+  let page = 1;
   while (true) {
-    const url = `${store.apiUrl}/wp-json/wc/v3/orders?per_page=${perPage}&page=${page}${afterParam}`;
-    const auth = Buffer.from(`${store.apiKey}:${store.apiSecret}`).toString("base64");
-    const res = await fetch(url, { headers: { Authorization: `Basic ${auth}` } });
+    const url = `${store.apiUrl}/wp-json/wc/v3/orders?per_page=100&page=${page}${afterParam}`;
+    const res = await fetch(url, { headers });
     if (!res.ok) throw new Error(`WC API error: ${res.status}`);
 
     const wcOrders = await res.json();
@@ -365,20 +408,62 @@ async function syncWooCommerce(store: any, tenantId: string, since?: Date | null
       });
     }
 
-    if (wcOrders.length < perPage) break;
+    if (wcOrders.length < 100) break;
     page++;
   }
 }
 
 // ── Helper: Sync Magento ──
 async function syncMagento(store: any, tenantId: string) {
-  let page = 1;
-  const pageSize = 100;
   const base = store.apiUrl.replace(/\/$/, "").replace(/\/rest\/V1$/, "");
+  const headers = { Authorization: `Bearer ${store.apiKey}` };
 
+  // 1. Sync customers
+  let page = 1;
+  while (true) {
+    const url = `${base}/rest/V1/customers/search?searchCriteria[pageSize]=100&searchCriteria[currentPage]=${page}`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) break;
+    const data = await res.json();
+    const customers = data.items || [];
+    if (!customers.length) break;
+
+    for (const c of customers) {
+      if (!c.email) continue;
+      const phone = normalizePhone(
+        c.custom_attributes?.find((a: any) => a.attribute_code === "mobilenumber")?.value ||
+        c.custom_attributes?.find((a: any) => a.attribute_code === "telephone")?.value ||
+        c.addresses?.[0]?.telephone
+      );
+      const existing = await db.query.contacts.findFirst({
+        where: and(eq(contacts.tenantId, tenantId), eq(contacts.email, c.email)),
+      });
+      if (existing) {
+        const patch: any = { updatedAt: new Date() };
+        if (phone && (!existing.phone || !existing.phone.startsWith("55"))) patch.phone = phone;
+        await db.update(contacts).set(patch).where(eq(contacts.id, existing.id));
+      } else {
+        await db.insert(contacts).values({
+          tenantId, storeId: store.id,
+          externalId: String(c.id),
+          email: c.email,
+          phone,
+          firstName: c.firstname,
+          lastName: c.lastname,
+        }).onConflictDoNothing();
+      }
+    }
+
+    if (customers.length < 100) break;
+    page++;
+  }
+
+  // 2. Sync orders
+  page = 1;
+  const pageSize = 100;
   while (true) {
     const url = `${base}/rest/V1/orders?searchCriteria[pageSize]=${pageSize}&searchCriteria[currentPage]=${page}`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${store.apiKey}` } });
+    const res = await fetch(url, { headers });
     if (!res.ok) throw new Error(`Magento API error ${res.status}: ${await res.text().then(t => t.slice(0,200))}`);
 
     const data = await res.json();
@@ -399,6 +484,7 @@ async function syncMagento(store: any, tenantId: string) {
           name: i.name, sku: i.sku, quantity: i.qty_ordered, price: i.price, total: i.row_total,
         })),
         customerEmail: order.customer_email,
+        customerPhone: order.billing_address?.telephone,
         customerFirst: order.customer_firstname,
         customerLast: order.customer_lastname,
         customerCity: order.billing_address?.city,
@@ -411,7 +497,7 @@ async function syncMagento(store: any, tenantId: string) {
     page++;
   }
 
-  // Sync abandoned carts (quotes ativas há mais de 1h)
+  // 3. Sync abandoned carts
   await syncMagentoAbandonedCarts(store, tenantId, base);
 }
 
